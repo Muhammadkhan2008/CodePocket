@@ -155,8 +155,24 @@ const FileManager = {
   },
 
   save() {
+    // Save to localStorage internally
     localStorage.setItem('codepocket_files', JSON.stringify(this.files));
-    TerminalManager.print(`Saved ${this.activeFile} to storage.`);
+    
+    // Trigger download/save prompt for the user
+    if (this.activeFile) {
+      const content = this.files[this.activeFile] || "";
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = this.activeFile;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      TerminalManager.print(`Exporting ${this.activeFile}...`);
+    } else {
+      TerminalManager.print("No file active to save.", "error");
+    }
   },
 
   renderSidebar() {
