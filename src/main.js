@@ -130,6 +130,12 @@ const FileManager = {
     
     document.getElementById("action-new-file").addEventListener("click", () => this.promptNewFile());
     document.getElementById("welcome-new-file").addEventListener("click", () => this.promptNewFile());
+    const welcomeOpenFolder = document.getElementById("welcome-open-folder");
+    if (welcomeOpenFolder) {
+      welcomeOpenFolder.addEventListener("click", () => {
+        document.getElementById("native-folder-picker").click();
+      });
+    }
     document.getElementById("action-save").addEventListener("click", () => this.save());
     document.getElementById("action-close").addEventListener("click", () => this.closeFile());
     
@@ -331,7 +337,7 @@ const EditorManager = {
           }
           break;
         }
-        case "rename":
+        case "rename": {
           const newName = prompt("Rename file to:", FileManager.activeFile);
           if(newName && newName !== FileManager.activeFile) {
             FileManager.files[newName] = FileManager.files[FileManager.activeFile];
@@ -339,6 +345,7 @@ const EditorManager = {
             FileManager.openFile(newName);
           }
           break;
+        }
         case "newline":
           this.insertText("\n");
           break;
@@ -363,7 +370,7 @@ const EditorManager = {
           document.execCommand("cut");
           TerminalManager.print("Cut executed.");
           break;
-        case "copy":
+        case "copy": {
           const selection = this.view.state.sliceDoc(this.view.state.selection.main.from, this.view.state.selection.main.to);
           if (navigator.clipboard && window.isSecureContext) {
             navigator.clipboard.writeText(selection);
@@ -377,6 +384,7 @@ const EditorManager = {
           }
           TerminalManager.print("Copied to clipboard.");
           break;
+        }
         case "paste":
           navigator.clipboard.readText().then(text => this.insertText(text));
           break;
