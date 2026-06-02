@@ -8,6 +8,8 @@ import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { Compartment, EditorState } from "@codemirror/state";
+import { autocompletion, closeBrackets, acceptCompletion } from "@codemirror/autocomplete";
+import { lintGutter } from "@codemirror/lint";
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -345,6 +347,9 @@ const EditorManager = {
         wrapCompartment.of([]),
         updateListener,
         languageCompartment.of(javascript()),
+        autocompletion({ activateOnTyping: true, maxRenderedOptions: 10 }),
+        closeBrackets(),
+        lintGutter(),
         oneDark
       ],
       parent: document.getElementById("editor-container")
