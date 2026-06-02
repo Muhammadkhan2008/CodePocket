@@ -596,6 +596,17 @@ const TerminalManager = {
         setTimeout(() => {
           t.fitAddon.fit();
           t.term.focus();
+          // Notify native layer of new terminal dimensions
+          if (window.Capacitor?.isNativePlatform()) {
+            const dims = t.fitAddon.proposeDimensions();
+            if (dims) {
+              PRootPlugin.resizeTerminal({
+                sessionId: id,
+                cols: dims.cols,
+                rows: dims.rows
+              }).catch(() => {});
+            }
+          }
         }, 50);
       } else {
         t.tabEl.style.color = "var(--text-secondary)";
