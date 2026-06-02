@@ -1,13 +1,44 @@
 import { EditorView, basicSetup } from "codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { html } from "@codemirror/lang-html";
+import { css } from "@codemirror/lang-css";
 import { cpp } from "@codemirror/lang-cpp";
 import { python } from "@codemirror/lang-python";
+import { json } from "@codemirror/lang-json";
+import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { Compartment } from "@codemirror/state";
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import 'xterm/css/xterm.css';
+
+// Language map for runtime switching
+const LANGUAGE_MAP = {
+  js: () => javascript(),
+  ts: () => javascript({ typescript: true }),
+  jsx: () => javascript({ jsx: true }),
+  tsx: () => javascript({ jsx: true, typescript: true }),
+  html: () => html(),
+  css: () => css(),
+  cpp: () => cpp(),
+  c: () => cpp(),
+  py: () => python(),
+  python: () => python(),
+  json: () => json(),
+  md: () => markdown(),
+  markdown: () => markdown(),
+};
+
+// Detect language from filename extension
+function detectLanguage(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  return LANGUAGE_MAP[ext] ? LANGUAGE_MAP[ext]() : javascript();
+}
+
+// Global compartments for hot-swapping
+const languageCompartment = new Compartment();
+const wrapCompartment = new Compartment();
 
 const PRootPlugin = registerPlugin('PRootPlugin');
 
@@ -255,9 +286,9 @@ const EditorManager = {
       doc: "",
       extensions: [
         basicSetup,
-        EditorView.lineWrapping,
+        wrapCompartment.of([]),
         updateListener,
-        javascript(), // Default
+        languageCompartment.of(javascript()),
         oneDark
       ],
       parent: document.getElementById("editor-container")
@@ -267,8 +298,10 @@ const EditorManager = {
   },
 
   setContent(content, filename) {
+    const lang = filename ? detectLanguage(filename) : javascript();
     this.view.dispatch({
-      changes: { from: 0, to: this.view.state.doc.length, insert: content }
+      changes: { from: 0, to: this.view.state.doc.length, insert: content },
+      effects: languageCompartment.reconfigure(lang)
     });
   },
 
@@ -287,10 +320,17 @@ const EditorManager = {
       const action = e.target.getAttribute("data-action");
       
       switch(action) {
-        case "syntax":
-          const lang = prompt("Enter language (js, html, css, cpp, python):", "js");
-          if(lang) TerminalManager.print(`Syntax switched to ${lang} (Will apply on next file load)`);
+        case "syntax": {
+          const langKey = prompt("Enter language (js, ts, html, css, cpp, py, json, md):", "js");
+          if (langKey && LANGUAGE_MAP[langKey.toLowerCase()]) {
+            const newLang = LANGUAGE_MAP[langKey.toLowerCase()]();
+            EditorManager.view.dispatch({ effects: languageCompartment.reconfigure(newLang) });
+            TerminalManager.print(`✅ Syntax switched to ${langKey}`, "success");
+          } else if (langKey) {
+            TerminalManager.print(`Unknown language: ${langKey}. Try: js, ts, html, css, cpp, py, json, md`, "error");
+          }
           break;
+        }
         case "rename":
           const newName = prompt("Rename file to:", FileManager.activeFile);
           if(newName && newName !== FileManager.activeFile) {
