@@ -625,7 +625,34 @@ window.addEventListener("message", (e) => {
 
 
 // ==========================================
-// 5. UI MANAGER & KEYBOARD FIXES
+// 5. SETTINGS MANAGER
+// ==========================================
+const SettingsManager = {
+  DEFAULTS: {
+    editorFontSize: 14,
+    termFontSize: 14,
+    theme: 'dark',
+    wordWrap: false,
+    tabSize: 2,
+  },
+  load() {
+    try {
+      const saved = localStorage.getItem('codepocket_settings');
+      return saved ? { ...this.DEFAULTS, ...JSON.parse(saved) } : { ...this.DEFAULTS };
+    } catch(e) { return { ...this.DEFAULTS }; }
+  },
+  save(settings) {
+    try { localStorage.setItem('codepocket_settings', JSON.stringify(settings)); }
+    catch(e) { console.error('Failed to save settings:', e); }
+  },
+  saveSetting(key, value) {
+    const s = this.load(); s[key] = value; this.save(s);
+  },
+  get(key) { return this.load()[key]; }
+};
+
+// ==========================================
+// 6. UI MANAGER & KEYBOARD FIXES
 // ==========================================
 const UIManager = {
   init() {
@@ -734,9 +761,11 @@ const UIManager = {
     const fontSlider = document.getElementById("setting-font-size");
     const fontVal = document.getElementById("font-size-val");
     fontSlider.addEventListener("input", (e) => {
-      fontVal.innerText = e.target.value;
-      document.documentElement.style.setProperty("--font-code", e.target.value + "px");
-      document.querySelector(".cm-editor").style.fontSize = e.target.value + "px";
+      const fs = parseInt(e.target.value);
+      fontVal.innerText = fs;
+      document.documentElement.style.setProperty("--font-code", fs + "px");
+      document.querySelector(".cm-editor").style.fontSize = fs + "px";
+      SettingsManager.saveSetting('editorFontSize', fs);
     });
 
     const termSlider = document.getElementById("setting-term-font");
