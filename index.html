@@ -216,16 +216,15 @@
 
         <!-- Terminal / Output Panel -->
         <div id="terminal-panel" class="hidden" style="display:flex; flex-direction:column;">
-          <div class="terminal-header">
-            <span>Console Output</span>
-            <button id="close-terminal-btn" title="Close">▼</button>
+          <div class="terminal-header" style="display:flex; justify-content:space-between; align-items:center;">
+            <div id="terminal-tabs" style="display:flex; overflow-x:auto; gap:5px; flex:1; align-items:center; padding-right:10px;">
+              <!-- Tabs dynamically injected here -->
+            </div>
+            <button id="add-terminal-btn" title="New Terminal" class="icon-btn" style="font-size:16px; margin-right:10px;">➕</button>
+            <button id="close-terminal-btn" title="Close" class="icon-btn">▼</button>
           </div>
-          <div id="terminal-output" style="flex:1; overflow-y:auto; padding-bottom:5px;">
-            <div class="log system">CodePocket API Ready...</div>
-          </div>
-          <div style="display:flex; border-top:1px solid var(--border); background:var(--bg-panel);">
-            <span style="padding:8px 5px 8px 10px; color:var(--accent); font-family:monospace; font-size:14px;">~$</span>
-            <input type="text" id="terminal-input" style="flex:1; background:transparent; border:none; color:var(--text-primary); outline:none; font-family:monospace; font-size:14px; padding:8px 5px;" placeholder="Type a command...">
+          <div id="terminal-output" style="flex:1; overflow:hidden;">
+            <!-- xterm.js mounts here -->
           </div>
         </div>
 

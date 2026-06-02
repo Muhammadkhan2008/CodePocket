@@ -362,61 +362,126 @@ const EditorManager = {
 const TerminalManager = {
   panel: document.getElementById("terminal-panel"),
   container: document.getElementById("terminal-output"),
-  inputRow: document.getElementById("terminal-input").parentElement,
-  term: null,
-  fitAddon: null,
+  tabsContainer: document.getElementById("terminal-tabs"),
+  terminals: {},
+  activeSessionId: null,
+  sessionCounter: 0,
+  globalListenerAdded: false,
   
   async init() {
-    this.inputRow.style.display = 'none'; // Hide old dummy input
-    this.container.innerHTML = ""; // Clear dummy logs
+    this.container.innerHTML = "";
     this.container.style.overflow = "hidden"; // xterm needs this
-    this.container.style.padding = "5px";
+    this.container.style.padding = "0px";
     
-    this.term = new Terminal({
+    if (!this.globalListenerAdded && window.Capacitor?.isNativePlatform()) {
+      PRootPlugin.addListener('terminal_output', (info) => {
+        if (this.terminals[info.sessionId]) {
+           this.terminals[info.sessionId].term.write(info.data);
+        }
+      });
+      
+      try {
+        await PRootPlugin.initEnvironment();
+      } catch (e) {
+        console.error("Failed to init Alpine:", e);
+      }
+      this.globalListenerAdded = true;
+    }
+    
+    // Create first terminal
+    this.createTerminal();
+    
+    document.getElementById("add-terminal-btn").addEventListener("click", () => {
+      this.createTerminal();
+    });
+  },
+  
+  async createTerminal() {
+    this.sessionCounter++;
+    const sessionId = `term_${this.sessionCounter}`;
+    
+    // Create Tab UI
+    const tabEl = document.createElement("button");
+    tabEl.className = "terminal-tab";
+    tabEl.innerText = `Term ${this.sessionCounter}`;
+    tabEl.style.padding = "5px 10px";
+    tabEl.style.border = "none";
+    tabEl.style.background = "transparent";
+    tabEl.style.color = "var(--text-secondary)";
+    tabEl.style.cursor = "pointer";
+    tabEl.style.outline = "none";
+    
+    // Create Container
+    const termContainer = document.createElement("div");
+    termContainer.style.width = "100%";
+    termContainer.style.height = "100%";
+    termContainer.style.padding = "5px";
+    termContainer.style.display = "none";
+    
+    this.tabsContainer.appendChild(tabEl);
+    this.container.appendChild(termContainer);
+    
+    const term = new Terminal({
       theme: { background: '#111', foreground: '#fff' },
       fontSize: 14,
       fontFamily: 'Fira Code, monospace',
       cursorBlink: true
     });
-    this.fitAddon = new FitAddon();
-    this.term.loadAddon(this.fitAddon);
-    this.term.open(this.container);
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(termContainer);
     
-    // Listen to terminal input and send to Java
-    this.term.onData(data => {
-      if (Capacitor.isNativePlatform()) {
-        PRootPlugin.writeData({ data: data });
+    term.onData(data => {
+      if (window.Capacitor?.isNativePlatform()) {
+        PRootPlugin.writeData({ sessionId, data });
       } else {
-        this.term.write(data); // Local echo fallback for web
+        term.write(data);
       }
     });
-
-    // Listen to Java output and send to terminal
-    if (Capacitor.isNativePlatform()) {
-      PRootPlugin.addListener('terminal_output', (info) => {
-        this.term.write(info.data);
-      });
-      
-      // Initialize Environment
-      this.term.write("\x1b[33mInitializing Native PRoot Environment...\x1b[0m\r\n");
+    
+    this.terminals[sessionId] = { term, fitAddon, tabEl, termContainer };
+    
+    tabEl.addEventListener("click", () => this.switchTerminal(sessionId));
+    this.switchTerminal(sessionId);
+    
+    if (window.Capacitor?.isNativePlatform()) {
       try {
-        await PRootPlugin.initEnvironment();
-        await PRootPlugin.startSession();
-        setTimeout(() => this.fitAddon.fit(), 500); // Fit after load
-      } catch(e) {
-        this.term.write("\x1b[31mError: " + e.message + "\x1b[0m\r\n");
+        await PRootPlugin.startSession({ sessionId });
+      } catch (e) {
+        term.write(`\x1b[31mError starting session: ${e.message}\x1b[0m\r\n`);
       }
     } else {
-      this.term.write("\x1b[31mWeb Browser Mode: PRoot not available.\x1b[0m\r\n");
+      term.write("\x1b[31mWeb Browser Mode: PRoot not available.\x1b[0m\r\n");
     }
   },
   
+  switchTerminal(sessionId) {
+    this.activeSessionId = sessionId;
+    Object.keys(this.terminals).forEach(id => {
+      const t = this.terminals[id];
+      if (id === sessionId) {
+        t.tabEl.style.color = "var(--accent)";
+        t.tabEl.style.borderBottom = "2px solid var(--accent)";
+        t.termContainer.style.display = "block";
+        setTimeout(() => {
+          t.fitAddon.fit();
+          t.term.focus();
+        }, 50);
+      } else {
+        t.tabEl.style.color = "var(--text-secondary)";
+        t.tabEl.style.borderBottom = "none";
+        t.termContainer.style.display = "none";
+      }
+    });
+  },
+  
   print(msg, type="system") {
-    let color = "\x1b[36m"; // Cyan for IDE
-    if(type === "error") color = "\x1b[31m"; // Red
-    else if(type === "success") color = "\x1b[32m"; // Green
-    
-    this.term.writeln(`${color}[IDE]\x1b[0m ${msg}`);
+    if (!this.activeSessionId || !this.terminals[this.activeSessionId]) return;
+    const term = this.terminals[this.activeSessionId].term;
+    let color = "\x1b[36m";
+    if(type === "error") color = "\x1b[31m";
+    else if(type === "success") color = "\x1b[32m";
+    term.writeln(`${color}[IDE]\x1b[0m ${msg}`);
     this.show();
   },
   
@@ -425,7 +490,12 @@ const TerminalManager = {
   },
   show() {
     this.panel.classList.remove("hidden");
-    setTimeout(() => this.fitAddon.fit(), 50);
+    if (this.activeSessionId) {
+      setTimeout(() => {
+        this.terminals[this.activeSessionId].fitAddon.fit();
+        this.terminals[this.activeSessionId].term.focus();
+      }, 50);
+    }
   }
 };
 
