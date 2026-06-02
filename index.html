@@ -1,13 +1,276 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>codepocket</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>CodePocket</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/src/style.css">
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
+    <!-- Floating Command Palette -->
+    <div id="command-palette" class="hidden">
+      <div style="display:flex; border-bottom:1px solid var(--border);">
+        <input type="text" id="palette-input" placeholder="Type a command..." />
+        <button id="close-palette-btn" class="icon-btn" style="padding:0 15px; color:var(--text-secondary);">✖</button>
+      </div>
+      <ul id="palette-results">
+        <li data-cmd="save">💾 Save File</li>
+        <li data-cmd="format">✨ Format Code</li>
+        <li data-cmd="settings">⚙️ Open Settings</li>
+      </ul>
+    </div>
+
+    <!-- Hidden Native Color Picker -->
+    <input type="color" id="native-color-picker" style="visibility:hidden; position:absolute;">
+
+    <!-- Top Header -->
+    <header id="top-header">
+      <div class="header-left">
+        <button id="hamburger-btn">☰</button>
+        <span class="app-title">CodePocket <span id="active-file-name" class="active-file">- index.html</span></span>
+      </div>
+      <div class="header-right">
+        <button id="run-btn" class="run-btn" title="Run Code">▶ Run</button>
+        
+        <!-- Editor Actions Dropdown -->
+        <div class="dropdown-wrapper">
+          <button id="pencil-btn" class="icon-btn" title="Editor Tools">✏️</button>
+          <div id="pencil-dropdown" class="dropdown-menu hidden">
+            <button data-action="rename">Rename</button>
+            <button data-action="syntax">Syntax Highlight</button>
+            <button data-action="wordwrap">Toggle Word Wrap</button>
+            <button data-action="newline">New Line</button>
+            <button data-action="format">Format Code</button>
+            <button data-action="color">Insert Color</button>
+            <div class="divider"></div>
+            <button data-action="cut">Cut</button>
+            <button data-action="copy">Copy</button>
+            <button data-action="paste">Paste</button>
+            <button data-action="selectall">Select All</button>
+          </div>
+        </div>
+
+        <!-- App Actions Dropdown -->
+        <div class="dropdown-wrapper">
+          <button id="dots-btn" class="icon-btn" title="Menu">⋮</button>
+          <div id="dots-dropdown" class="dropdown-menu hidden">
+            <button id="action-new-file">New File</button>
+            <button id="action-open-folder">Open Folder</button>
+            <button id="action-find-file">Find File</button>
+            <button id="action-save">Save</button>
+            <button id="action-close">Close File</button>
+            <div class="divider"></div>
+            <button id="action-palette">Command Palette (Ctrl+Shift+P)</button>
+            <button id="action-terminal">Console / Terminal</button>
+            <button id="action-settings-menu">Settings</button>
+            <button id="action-exit">Exit</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div id="workspace">
+      
+      <!-- Combined Left Sidebar Wrapper -->
+      <div id="left-sidebar" class="hidden-mobile">
+        
+        <!-- Left Activity Bar -->
+        <nav id="activity-bar">
+          <div class="activity-top">
+            <button class="activity-icon active" data-panel="explorer" title="Explorer">📁</button>
+            <button class="activity-icon" data-panel="search" title="Search">🔍</button>
+            <button class="activity-icon" data-panel="ai" title="CodePocket AI">🤖</button>
+            <button class="activity-icon" data-panel="plugins" title="Plugins">🧩</button>
+            <button class="activity-icon" data-panel="notifications" title="Notifications">🔔</button>
+          </div>
+          <div class="activity-bottom">
+            <button class="activity-icon" data-panel="profile" title="Profile">👤</button>
+            <button class="activity-icon" data-panel="settings" title="Settings">⚙️</button>
+          </div>
+        </nav>
+
+        <!-- Secondary Panel Container -->
+        <aside id="secondary-panel">
+          
+          <!-- EXPLORER PANEL -->
+          <div id="panel-explorer" class="side-panel active">
+            <div class="panel-header"><span>EXPLORER</span></div>
+            <div class="file-tree">
+              <div class="folder">
+                <span class="folder-name">📂 Local Workspace</span>
+                <div id="file-list" class="folder-content">
+                  <!-- Dynamically rendered files go here -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SEARCH PANEL -->
+          <div id="panel-search" class="side-panel hidden">
+            <div class="panel-header"><span>SEARCH</span></div>
+            <div class="panel-content">
+              <input type="text" id="global-search-input" placeholder="Search files...">
+              <button class="primary-btn" style="margin-top: 5px;">Find</button>
+              <div class="info-text">Search results will appear here.</div>
+            </div>
+          </div>
+
+          <!-- PLUGINS PANEL -->
+          <div id="panel-plugins" class="side-panel hidden">
+            <div class="panel-header"><span>PLUGIN STORE</span></div>
+            <div class="panel-content">
+              <input type="text" id="plugin-url" placeholder="GitHub Raw URL (.js)">
+              <button id="install-plugin-btn" class="primary-btn" style="margin-top: 5px;">📥 Install from URL</button>
+              
+              <h4 style="color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase; margin-bottom:10px;">Marketplace</h4>
+              
+              <div id="demo-plugins-list" style="padding-right:5px; display:flex; flex-direction:column; gap:5px;">
+                <div class="plugin-card"><div class="plugin-icon">🪄</div><div class="plugin-info"><h4>Autocomplete</h4><p>Advanced code completion.</p><small>repo: dev/autocomplete</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/autocomplete.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">🤖</div><div class="plugin-info"><h4>AI Autosuggest</h4><p>Smart line suggestions.</p><small>repo: ai/autosuggest</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/autosuggest.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">⚛️</div><div class="plugin-info"><h4>React Snippets</h4><p>Insert React components.</p><small>repo: codepocket/react</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/react-snippets.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">🧛</div><div class="plugin-info"><h4>Dracula Theme</h4><p>Dark mode for vampires.</p><small>repo: dracula/theme</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/dracula-theme.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">🟡</div><div class="plugin-info"><h4>Monokai Theme</h4><p>Classic warm theme.</p><small>repo: monokai/theme</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/monokai-theme.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">👨‍💻</div><div class="plugin-info"><h4>Hacker Mode</h4><p>Matrix style terminal UI.</p><small>repo: tools/hacker</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/hacker-mode.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">🦜</div><div class="plugin-info"><h4>Party Parrot</h4><p>Dancing parrot in sidebar.</p><small>repo: cult/parrot</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/dancing-parrot.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">📊</div><div class="plugin-info"><h4>Word Counter</h4><p>Track lines and characters.</p><small>repo: utils/counter</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/word-counter.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">⏰</div><div class="plugin-info"><h4>Live Clock</h4><p>Clock injected in header.</p><small>repo: ui/clock</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/live-clock.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">🗑️</div><div class="plugin-info"><h4>Clear Terminal</h4><p>Command to clean logs.</p><small>repo: term/clear</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/clear-terminal.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">🔠</div><div class="plugin-info"><h4>Uppercase Tool</h4><p>Convert code to CAPS.</p><small>repo: edit/uppercase</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/uppercase-text.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">🤣</div><div class="plugin-info"><h4>Joke Generator</h4><p>Dev jokes in terminal.</p><small>repo: fun/jokes</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/joke-generator.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+                <div class="plugin-card"><div class="plugin-icon">🕒</div><div class="plugin-info"><h4>Moment.js</h4><p>Loads from raw.github.</p><small>repo: moment/moment</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value='https://raw.githubusercontent.com/moment/moment/develop/min/moment.min.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+              </div>
+
+              <div class="divider" style="margin: 10px 0;"></div>
+              <h4 style="color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">Installed</h4>
+              <ul id="plugin-list" class="styled-list">
+                <!-- Installed plugins -->
+              </ul>
+            </div>
+          </div>
+
+          <!-- AI PANEL -->
+          <div id="panel-ai" class="side-panel hidden">
+            <div class="panel-header"><span>CODEPOCKET AI</span></div>
+            <div class="panel-content" style="flex:1; justify-content: space-between;">
+              <div id="ai-chat" class="chat-box">
+                <p class="system-msg">AI Ready. Ask me to write code!</p>
+              </div>
+              <input type="text" id="ai-input" placeholder="Ask AI...">
+            </div>
+          </div>
+
+          <!-- NOTIFICATIONS PANEL -->
+          <div id="panel-notifications" class="side-panel hidden">
+            <div class="panel-header"><span>NOTIFICATIONS</span></div>
+            <div class="panel-content">
+              <div class="info-text">No new notifications.</div>
+            </div>
+          </div>
+
+          <!-- SETTINGS PANEL -->
+          <div id="panel-settings" class="side-panel hidden">
+            <div class="panel-header"><span>SETTINGS</span></div>
+            <div class="panel-content" style="gap: 15px;">
+              <div style="background:var(--bg-panel); padding:10px; border-radius:8px; border:1px solid var(--border);">
+                <label style="display:block; margin-bottom:5px; font-size:12px; color:var(--text-primary);">Editor Font Size (<span id="font-size-val">14</span>px)</label>
+                <input type="range" id="setting-font-size" min="10" max="24" value="14" style="width:100%">
+              </div>
+              <div style="background:var(--bg-panel); padding:10px; border-radius:8px; border:1px solid var(--border);">
+                <label style="display:block; margin-bottom:5px; font-size:12px; color:var(--text-primary);">Terminal Font Size (<span id="term-font-val">12</span>px)</label>
+                <input type="range" id="setting-term-font" min="10" max="20" value="12" style="width:100%">
+              </div>
+              <button class="secondary-btn" id="setting-theme-btn" style="width:100%; padding:10px; margin-top:10px;">Toggle High Contrast Theme</button>
+            </div>
+          </div>
+
+          <!-- PROFILE PANEL -->
+          <div id="panel-profile" class="side-panel hidden">
+            <div class="panel-header"><span>PROFILE</span></div>
+            <div class="panel-content">
+              <div class="info-text" style="text-align:center; margin-bottom:10px;">Not logged in.</div>
+              <button class="primary-btn">Login with GitHub</button>
+            </div>
+          </div>
+          
+        </aside>
+
+      </div>
+
+      <!-- Editor Canvas Area -->
+      <main id="editor-area">
+        
+        <!-- Welcome Screen -->
+        <div id="welcome-screen" class="hidden">
+          <h1>CodePocket</h1>
+          <p>Code in your pocket.</p>
+          <div class="welcome-buttons">
+            <button class="primary-btn">📁 Open Folder from Device</button>
+            <button id="welcome-new-file" class="secondary-btn">📄 New File</button>
+          </div>
+        </div>
+
+        <!-- The actual CodeMirror Editor -->
+        <div id="editor-container"></div>
+
+        <!-- Terminal / Output Panel -->
+        <div id="terminal-panel" class="hidden" style="display:flex; flex-direction:column;">
+          <div class="terminal-header">
+            <span>Console Output</span>
+            <button id="close-terminal-btn" title="Close">▼</button>
+          </div>
+          <div id="terminal-output" style="flex:1; overflow-y:auto; padding-bottom:5px;">
+            <div class="log system">CodePocket API Ready...</div>
+          </div>
+          <div style="display:flex; border-top:1px solid var(--border); background:var(--bg-panel);">
+            <span style="padding:8px 5px 8px 10px; color:var(--accent); font-family:monospace; font-size:14px;">~$</span>
+            <input type="text" id="terminal-input" style="flex:1; background:transparent; border:none; color:var(--text-primary); outline:none; font-family:monospace; font-size:14px; padding:8px 5px;" placeholder="Type a command...">
+          </div>
+        </div>
+
+        <!-- Webview (Mini Browser) Panel -->
+        <div id="webview-modal" class="hidden">
+          <div class="webview-header">
+            <span>🌐 Browser Preview</span>
+            <button id="close-webview-btn">✖ Close</button>
+          </div>
+          <iframe id="webview-frame" sandbox="allow-scripts allow-modals allow-same-origin"></iframe>
+        </div>
+
+        <!-- Floating Symbol Bar Container (Bottom) -->
+        <div id="symbol-bar-container" class="collapsed">
+          <button id="symbol-toggle-btn">⌃</button>
+          <div id="quick-symbol-bar">
+            <!-- Sticky Modifiers -->
+            <button class="symbol-btn modifier" data-mod="ctrl">Ctrl</button>
+            <button class="symbol-btn modifier" data-mod="alt">Alt</button>
+            <button class="symbol-btn modifier" data-mod="shift">Shift</button>
+            <button class="symbol-btn modifier" data-mod="esc">Esc</button>
+            <!-- Symbols -->
+            <button class="symbol-btn">{</button>
+            <button class="symbol-btn">}</button>
+            <button class="symbol-btn">[</button>
+            <button class="symbol-btn">]</button>
+            <button class="symbol-btn">(</button>
+            <button class="symbol-btn">)</button>
+            <button class="symbol-btn">&lt;</button>
+            <button class="symbol-btn">&gt;</button>
+            <button class="symbol-btn">=</button>
+            <button class="symbol-btn">;</button>
+            <button class="symbol-btn">"</button>
+            <button class="symbol-btn">'</button>
+            <button class="symbol-btn">/</button>
+            <button class="symbol-btn">\</button>
+            <button class="symbol-btn">|</button>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Native Folder Picker -->
+    <input type="file" id="native-folder-picker" webkitdirectory directory style="display:none;" />
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>

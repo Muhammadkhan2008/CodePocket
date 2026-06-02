@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CodePocket</string>
+    <string name="title_activity_main">CodePocket</string>
+    <string name="package_name">com.muhammadkhan.codepocket</string>
+    <string name="custom_url_scheme">com.muhammadkhan.codepocket</string>
+</resources>
