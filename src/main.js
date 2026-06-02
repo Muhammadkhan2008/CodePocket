@@ -588,12 +588,12 @@ document.getElementById("run-btn").addEventListener("click", () => {
       const content = FileManager.getCurrentContent();
       const safeContent = content.replace(/'/g, "'\\''");
       // Write file into alpine root using echo
-      PRootPlugin.writeData({ data: `cat << 'EOF' > /root/${active}\n${content}\nEOF\n` });
+      PRootPlugin.writeData({ sessionId: TerminalManager.activeSessionId, data: `cat << 'EOF' > /root/${active}\n${content}\nEOF\n` });
       
       // Run it
       let cmd = active.endsWith(".py") ? `python3 /root/${active}\n` : `g++ /root/${active} && ./a.out\n`;
       setTimeout(() => {
-        PRootPlugin.writeData({ data: cmd });
+        PRootPlugin.writeData({ sessionId: TerminalManager.activeSessionId, data: cmd });
         TerminalManager.show();
       }, 500);
     } else {
@@ -785,7 +785,7 @@ const UIManager = {
           if (mod === "esc") {
              // Immediate Escape key press
              if (!TerminalManager.panel.classList.contains("hidden")) {
-               if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ data: "\x1B" });
+               if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ sessionId: TerminalManager.activeSessionId, data: "\x1B" });
              } else {
                EditorManager.view.contentDOM.blur();
              }
@@ -803,7 +803,7 @@ const UIManager = {
         if (!TerminalManager.panel.classList.contains("hidden")) {
             let code = char;
             if (modifiers.ctrl && char.toLowerCase() === 'c') code = "\x03";
-            if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ data: code });
+            if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ sessionId: TerminalManager.activeSessionId, data: code });
         } else {
             EditorManager.insertText(char);
         }
@@ -816,7 +816,7 @@ const UIManager = {
         if (e.key.toLowerCase() === 'c') {
           if (!TerminalManager.panel.classList.contains("hidden")) {
             e.preventDefault();
-            if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ data: "\x03" });
+            if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ sessionId: TerminalManager.activeSessionId, data: "\x03" });
             modifiers.ctrl = false;
             document.querySelector('[data-mod="ctrl"]').classList.remove("sticky-active");
           }
