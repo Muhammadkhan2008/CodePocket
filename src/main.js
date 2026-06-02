@@ -935,6 +935,96 @@ const UIManager = {
   }
 };
 
+
+// ==========================================
+// SEARCH-IN-FILES IMPLEMENTATION
+// ==========================================
+function initSearchPanel() {
+  const searchInput = document.getElementById("search-query");
+  const searchBtn = document.getElementById("search-btn");
+  const searchResults = document.getElementById("search-results");
+  const replaceInput = document.getElementById("replace-query");
+  const replaceAllBtn = document.getElementById("replace-all-btn");
+
+  if (!searchBtn || !searchInput) return;
+
+  function doSearch() {
+    const query = searchInput.value.trim();
+    if (!query) {
+      searchResults.innerHTML = "<p style='color:var(--text-secondary);padding:8px'>Enter a search term above</p>";
+      return;
+    }
+    const isRegex = document.getElementById("search-regex")?.checked || false;
+    const isCaseSensitive = document.getElementById("search-case")?.checked || false;
+    let regex;
+    try {
+      regex = new RegExp(isRegex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        isCaseSensitive ? "g" : "gi");
+    } catch(e) {
+      searchResults.innerHTML = `<p style='color:var(--error)'>Invalid regex: ${e.message}</p>`;
+      return;
+    }
+
+    let totalMatches = 0;
+    let html = "";
+    for (const [filename, fileContent] of Object.entries(FileManager.files)) {
+      const lines = fileContent.split("\n");
+      const fileMatches = [];
+      lines.forEach((line, lineIdx) => {
+        regex.lastIndex = 0;
+        if (regex.test(line)) {
+          const highlighted = line.replace(regex, m => `<mark style='background:#ff0;color:#000'>${m}</mark>`);
+          fileMatches.push({ lineNum: lineIdx + 1, text: highlighted });
+          totalMatches++;
+        }
+      });
+      if (fileMatches.length > 0) {
+        html += `<div class="search-file-group" style="margin-bottom:8px">`;
+        html += `<div style="color:var(--accent);font-weight:bold;padding:4px 0;cursor:pointer" onclick="FileManager.openFile('${filename}')">📄 ${filename} (${fileMatches.length} match${fileMatches.length>1?'es':''})</div>`;
+        fileMatches.forEach(m => {
+          html += `<div class="search-result" style="padding:2px 0 2px 12px;font-size:12px;cursor:pointer;border-left:2px solid var(--border)"
+            onclick="FileManager.openFile('${filename}')"
+            title="Line ${m.lineNum}: click to open">
+            <span style='color:var(--text-secondary)'>${m.lineNum}:</span> <code>${m.text}</code>
+          </div>`;
+        });
+        html += `</div>`;
+      }
+    }
+    if (totalMatches === 0) {
+      searchResults.innerHTML = `<p style='color:var(--text-secondary);padding:8px'>No results for "${query}"</p>`;
+    } else {
+      searchResults.innerHTML = `<p style='color:var(--text-secondary);padding:4px 0 8px'>${totalMatches} match${totalMatches>1?'es':''} in ${Object.keys(FileManager.files).length} files</p>` + html;
+    }
+  }
+
+  searchBtn.addEventListener("click", doSearch);
+  searchInput.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+
+  if (replaceAllBtn && replaceInput) {
+    replaceAllBtn.addEventListener("click", () => {
+      const query = searchInput.value.trim();
+      const replacement = replaceInput.value;
+      if (!query) return;
+      let totalReplaced = 0;
+      for (const filename of Object.keys(FileManager.files)) {
+        const before = FileManager.files[filename];
+        const after = before.split(query).join(replacement);
+        if (before !== after) {
+          totalReplaced += (before.split(query).length - 1);
+          FileManager.files[filename] = after;
+          if (FileManager.activeFile === filename) {
+            EditorManager.setContent(after, filename);
+          }
+        }
+      }
+      localStorage.setItem("codepocket_files", JSON.stringify(FileManager.files));
+      TerminalManager.print(`Replaced ${totalReplaced} occurrence${totalReplaced!==1?'s':''} of "${query}" with "${replacement}"`, totalReplaced ? "success" : "error");
+      doSearch();
+    });
+  }
+}
+
 // ==========================================
 // 6. BOOTSTRAP APP
 // ==========================================
@@ -942,3 +1032,4 @@ FileManager.init();
 EditorManager.init();
 TerminalManager.init();
 UIManager.init();
+initSearchPanel();
