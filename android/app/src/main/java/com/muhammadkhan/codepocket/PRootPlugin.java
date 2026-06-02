@@ -35,9 +35,9 @@ public class PRootPlugin extends Plugin {
                     Log.i(TAG, "Initializing Alpine Environment...");
                     notifyJS("system", "Installing Core System from bundled assets...\r\n");
 
-                    // Copy Alpine tarball from APK bundled assets
+                    // Copy Alpine tarball from APK bundled assets (renamed to .bin to bypass Android aapt stripping)
                     File tarball = new File(filesDir, "alpine.tar.gz");
-                    copyAssetFile(context, "public/assets/native/alpine.tar.gz", tarball);
+                    copyAssetFile(context, "public/assets/native/alpine.bin", tarball);
 
                     // Extract Alpine using native tar
                     notifyJS("system", "Extracting Alpine Linux...\r\n");
