@@ -342,20 +342,17 @@ const EditorManager = {
         case "newline":
           this.insertText("\n");
           break;
-        case "wordwrap":
-          const contentEl = document.querySelector(".cm-content");
-          const lineEls = document.querySelectorAll(".cm-line");
-          if (contentEl.style.whiteSpace === "pre-wrap") {
-            contentEl.style.whiteSpace = "pre";
-            lineEls.forEach(l => l.style.whiteSpace = "pre");
-            TerminalManager.print("Word Wrap OFF");
-          } else {
-            contentEl.style.whiteSpace = "pre-wrap";
-            contentEl.style.wordBreak = "break-word";
-            lineEls.forEach(l => l.style.whiteSpace = "pre-wrap");
-            TerminalManager.print("Word Wrap ON");
-          }
+        case "wordwrap": {
+          const isWrapped = EditorManager.wordWrapOn || false;
+          EditorManager.wordWrapOn = !isWrapped;
+          EditorManager.view.dispatch({
+            effects: wrapCompartment.reconfigure(
+              EditorManager.wordWrapOn ? EditorView.lineWrapping : []
+            )
+          });
+          TerminalManager.print(`Word Wrap ${EditorManager.wordWrapOn ? "ON ✅" : "OFF"}`);
           break;
+        }
         case "format":
           TerminalManager.print("Code formatted.");
           break;
