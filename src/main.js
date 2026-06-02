@@ -698,10 +698,11 @@ const UIManager = {
     const termVal = document.getElementById("term-font-val");
     termSlider.addEventListener("input", (e) => {
       termVal.innerText = e.target.value;
-      if (TerminalManager.term) {
-        TerminalManager.term.options.fontSize = parseInt(e.target.value);
-        TerminalManager.fitAddon.fit();
-      }
+      const newFontSize = parseInt(e.target.value);
+      Object.values(TerminalManager.terminals).forEach(({ term, fitAddon }) => {
+        term.options.fontSize = newFontSize;
+        if (fitAddon) fitAddon.fit();
+      });
     });
 
     document.getElementById("setting-theme-btn").addEventListener("click", () => {
