@@ -30,47 +30,77 @@ public class PRootPlugin extends Plugin {
         File prootFile = new File(filesDir, "proot");
         File alpineDir = new File(filesDir, "alpine");
 
-        try {
-            if (!prootFile.exists() || !alpineDir.exists()) {
-                Log.i(TAG, "Initializing Alpine Environment...");
-                notifyJS("Installing Core System... (This may take a minute)");
+        new Thread(() -> {
+            try {
+                if (!prootFile.exists() || !alpineDir.exists()) {
+                    Log.i(TAG, "Initializing Alpine Environment...");
+                    notifyJS("Installing Core System... (Requires Internet)\r\n");
 
-                // Copy PRoot binary
-                copyAssetFile(context, "public/assets/native/proot", prootFile);
-                prootFile.setExecutable(true);
+                    // Download PRoot
+                    notifyJS("Downloading PRoot Engine...\r\n");
+                    downloadFile("https://github.com/proot-me/proot/releases/download/v5.3.0/proot-v5.3.0-aarch64-static", prootFile);
+                    prootFile.setExecutable(true);
 
-                // Copy Alpine tarball
-                File tarball = new File(filesDir, "alpine.tar.gz");
-                copyAssetFile(context, "public/assets/native/alpine.tar.gz", tarball);
+                    // Download Alpine
+                    notifyJS("Downloading Alpine Linux rootfs (~3MB)...\r\n");
+                    File tarball = new File(filesDir, "alpine.tar.gz");
+                    downloadFile("https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz", tarball);
 
-                // Extract Alpine using native tar
-                notifyJS("Extracting Alpine Linux rootfs...");
-                alpineDir.mkdirs();
-                Process tarProcess = Runtime.getRuntime().exec(new String[]{"tar", "-xzf", tarball.getAbsolutePath(), "-C", alpineDir.getAbsolutePath()});
-                tarProcess.waitFor();
-                tarball.delete(); // Cleanup
-                
-                // Write nameserver to resolv.conf so internet works inside alpine
-                File resolvConf = new File(alpineDir, "etc/resolv.conf");
-                if (!resolvConf.exists()) {
-                    resolvConf.getParentFile().mkdirs();
+                    // Extract Alpine using native tar
+                    notifyJS("Extracting Alpine Linux...\r\n");
+                    alpineDir.mkdirs();
+                    Process tarProcess = Runtime.getRuntime().exec(new String[]{"tar", "-xzf", tarball.getAbsolutePath(), "-C", alpineDir.getAbsolutePath()});
+                    tarProcess.waitFor();
+                    tarball.delete(); // Cleanup
+                    
+                    // Write nameserver to resolv.conf so internet works inside alpine
+                    File resolvConf = new File(alpineDir, "etc/resolv.conf");
+                    if (!resolvConf.exists()) {
+                        resolvConf.getParentFile().mkdirs();
+                    }
+                    FileOutputStream out = new FileOutputStream(resolvConf);
+                    out.write("nameserver 8.8.8.8\nnameserver 1.1.1.1\n".getBytes());
+                    out.close();
+
+                    notifyJS("Environment initialized successfully!\r\n");
+                } else {
+                    notifyJS("Alpine Environment found.\r\n");
                 }
-                FileOutputStream out = new FileOutputStream(resolvConf);
-                out.write("nameserver 8.8.8.8\nnameserver 1.1.1.1\n".getBytes());
-                out.close();
 
-                notifyJS("Environment initialized successfully!\r\n");
-            } else {
-                notifyJS("Alpine Environment found.\r\n");
+                JSObject ret = new JSObject();
+                ret.put("status", "ready");
+                call.resolve(ret);
+            } catch (Exception e) {
+                Log.e(TAG, "Init failed", e);
+                notifyJS("\x1b[31mInit Error: " + e.getMessage() + "\x1b[0m\r\n");
+                call.reject("Init failed: " + e.getMessage());
             }
+        }).start();
+    }
 
-            JSObject ret = new JSObject();
-            ret.put("status", "ready");
-            call.resolve(ret);
-        } catch (Exception e) {
-            Log.e(TAG, "Init failed", e);
-            call.reject("Init failed: " + e.getMessage());
+    private void downloadFile(String urlStr, File dest) throws IOException {
+        java.net.URL url = new java.net.URL(urlStr);
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        conn.setInstanceFollowRedirects(true);
+        conn.connect();
+        
+        // Handle redirects manually if needed
+        int status = conn.getResponseCode();
+        if (status == java.net.HttpURLConnection.HTTP_MOVED_TEMP || status == java.net.HttpURLConnection.HTTP_MOVED_PERM || status == java.net.HttpURLConnection.HTTP_SEE_OTHER) {
+            String newUrl = conn.getHeaderField("Location");
+            conn = (java.net.HttpURLConnection) new java.net.URL(newUrl).openConnection();
+            conn.connect();
         }
+
+        InputStream in = conn.getInputStream();
+        FileOutputStream out = new FileOutputStream(dest);
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+        in.close();
+        out.close();
     }
 
     @PluginMethod
