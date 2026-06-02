@@ -271,11 +271,22 @@ const FileManager = {
   },
 
   openFile(name) {
-    if (!this.files[name] && this.files[name] !== "") return;
+    if (this.files[name] === undefined) return;
+    // Save current file's editor state before switching
+    if (this.activeFile && EditorManager.view) {
+      this.fileStates = this.fileStates || {};
+      this.fileStates[this.activeFile] = EditorManager.view.state;
+    }
     this.activeFile = name;
     this.renderSidebar();
-    EditorManager.setContent(this.files[name], name);
-  },
+    // Restore saved EditorState for this file, or load fresh content
+    const savedState = (this.fileStates || {})[name];
+    if (savedState) {
+      EditorManager.view.setState(savedState);
+    } else {
+      EditorManager.setContent(this.files[name], name);
+    }
+  },,
 
   promptNewFile() {
     const name = prompt("File name (e.g. script.js):");
