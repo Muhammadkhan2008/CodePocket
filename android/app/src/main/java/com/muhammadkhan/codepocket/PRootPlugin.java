@@ -72,7 +72,7 @@ public class PRootPlugin extends Plugin {
                 call.resolve(ret);
             } catch (Exception e) {
                 Log.e(TAG, "Init failed", e);
-                notifyJS("\x1b[31mInit Error: " + e.getMessage() + "\x1b[0m\r\n");
+                notifyJS("\u001b[31mInit Error: " + e.getMessage() + "\u001b[0m\r\n");
                 call.reject("Init failed: " + e.getMessage());
             }
         }).start();
