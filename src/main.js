@@ -748,6 +748,7 @@ const UIManager = {
         term.options.fontSize = newFontSize;
         if (fitAddon) fitAddon.fit();
       });
+      SettingsManager.saveSetting('termFontSize', newFontSize);
     });
 
     document.getElementById("setting-theme-btn").addEventListener("click", () => {
@@ -759,8 +760,29 @@ const UIManager = {
         '--accent': '#ffcc00',
         '--border': '#333'
       });
+      SettingsManager.saveSetting('theme', 'high-contrast');
       TerminalManager.print("High Contrast Theme Applied!", "success");
     });
+
+    // Apply restored settings to UI elements
+    const editorFontEl = document.getElementById("setting-font-size");
+    const termFontEl = document.getElementById("setting-term-font-size");
+    if (editorFontEl) {
+      editorFontEl.value = savedSettings.editorFontSize;
+      fontVal.innerText = savedSettings.editorFontSize;
+      document.getElementById("editor-container").style.fontSize = savedSettings.editorFontSize + "px";
+    }
+    if (termFontEl) {
+      termFontEl.value = savedSettings.termFontSize;
+      termVal.innerText = savedSettings.termFontSize;
+    }
+    // Restore word wrap
+    if (savedSettings.wordWrap) {
+      EditorManager.wordWrapOn = true;
+      EditorManager.view.dispatch({
+        effects: wrapCompartment.reconfigure(EditorView.lineWrapping)
+      });
+    }
   },
 
   setupMobileKeyboardFixes() {
