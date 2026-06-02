@@ -5,6 +5,9 @@ import { cpp } from "@codemirror/lang-cpp";
 import { python } from "@codemirror/lang-python";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Terminal } from 'xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import 'xterm/css/xterm.css';
 
 const PRootPlugin = registerPlugin('PRootPlugin');
 
@@ -94,13 +97,11 @@ const FileManager = {
     this.activeFile = Object.keys(this.files)[0];
     this.renderSidebar();
     
-    // UI Bindings
     document.getElementById("action-new-file").addEventListener("click", () => this.promptNewFile());
     document.getElementById("welcome-new-file").addEventListener("click", () => this.promptNewFile());
     document.getElementById("action-save").addEventListener("click", () => this.save());
     document.getElementById("action-close").addEventListener("click", () => this.closeFile());
     
-    // Command Palette Button (Moved to 3-Dots)
     const actionPalette = document.getElementById("action-palette");
     if(actionPalette) {
       actionPalette.addEventListener("click", () => {
@@ -111,7 +112,6 @@ const FileManager = {
       });
     }
     
-    // New 3-Dots actions
     document.getElementById("action-open-folder").addEventListener("click", () => {
       document.getElementById("native-folder-picker").click();
       document.getElementById("dots-dropdown").classList.add("hidden");
@@ -247,9 +247,6 @@ const EditorManager = {
     this.view.dispatch({
       changes: { from: 0, to: this.view.state.doc.length, insert: content }
     });
-    
-    // Very basic syntax re-configuration could go here if we dynamically replace extensions.
-    // For now, it stays multi-lang tolerant.
   },
 
   insertText(text) {
@@ -297,14 +294,13 @@ const EditorManager = {
           }
           break;
         case "format":
-          // Very basic simulation of format
           TerminalManager.print("Code formatted.");
           break;
         case "color":
           document.getElementById("native-color-picker").click();
           break;
         case "cut":
-          document.execCommand("cut"); // Native fallback
+          document.execCommand("cut");
           TerminalManager.print("Cut executed.");
           break;
         case "copy":
@@ -331,7 +327,6 @@ const EditorManager = {
       dropdown.classList.add("hidden");
     });
     
-    // Handle Color Picker result
     document.getElementById("native-color-picker").addEventListener("input", (e) => {
       this.insertText(e.target.value);
     });
@@ -339,55 +334,87 @@ const EditorManager = {
 };
 
 // ==========================================
-// 4. TERMINAL & WEBVIEW MANAGER
+// 4. TERMINAL MANAGER (xterm.js)
 // ==========================================
 const TerminalManager = {
   panel: document.getElementById("terminal-panel"),
-  output: document.getElementById("terminal-output"),
+  container: document.getElementById("terminal-output"),
+  inputRow: document.getElementById("terminal-input").parentElement,
+  term: null,
+  fitAddon: null,
+  
+  async init() {
+    this.inputRow.style.display = 'none'; // Hide old dummy input
+    this.container.innerHTML = ""; // Clear dummy logs
+    this.container.style.overflow = "hidden"; // xterm needs this
+    this.container.style.padding = "5px";
+    
+    this.term = new Terminal({
+      theme: { background: '#111', foreground: '#fff' },
+      fontSize: 14,
+      fontFamily: 'Fira Code, monospace',
+      cursorBlink: true
+    });
+    this.fitAddon = new FitAddon();
+    this.term.loadAddon(this.fitAddon);
+    this.term.open(this.container);
+    
+    // Listen to terminal input and send to Java
+    this.term.onData(data => {
+      if (Capacitor.isNativePlatform()) {
+        PRootPlugin.writeData({ data: data });
+      } else {
+        this.term.write(data); // Local echo fallback for web
+      }
+    });
+
+    // Listen to Java output and send to terminal
+    if (Capacitor.isNativePlatform()) {
+      PRootPlugin.addListener('terminal_output', (info) => {
+        this.term.write(info.data);
+      });
+      
+      // Initialize Environment
+      this.term.write("\x1b[33mInitializing Native PRoot Environment...\x1b[0m\r\n");
+      try {
+        await PRootPlugin.initEnvironment();
+        await PRootPlugin.startSession();
+        setTimeout(() => this.fitAddon.fit(), 500); // Fit after load
+      } catch(e) {
+        this.term.write("\x1b[31mError: " + e.message + "\x1b[0m\r\n");
+      }
+    } else {
+      this.term.write("\x1b[31mWeb Browser Mode: PRoot not available.\x1b[0m\r\n");
+    }
+  },
   
   print(msg, type="system") {
-    const el = document.createElement("div");
-    el.className = `log ${type}`;
-    el.textContent = `> ${msg}`;
-    this.output.appendChild(el);
-    this.output.scrollTop = this.output.scrollHeight;
-    this.panel.classList.remove("hidden");
+    let color = "\x1b[36m"; // Cyan for IDE
+    if(type === "error") color = "\x1b[31m"; // Red
+    else if(type === "success") color = "\x1b[32m"; // Green
+    
+    this.term.writeln(`${color}[IDE]\x1b[0m ${msg}`);
+    this.show();
   },
   
   hide() {
     this.panel.classList.add("hidden");
+  },
+  show() {
+    this.panel.classList.remove("hidden");
+    setTimeout(() => this.fitAddon.fit(), 50);
   }
 };
 
 document.getElementById("action-terminal").addEventListener("click", () => {
-  TerminalManager.panel.classList.toggle("hidden");
+  if (TerminalManager.panel.classList.contains("hidden")) {
+    TerminalManager.show();
+  } else {
+    TerminalManager.hide();
+  }
   document.getElementById("dots-dropdown").classList.add("hidden");
 });
 document.getElementById("close-terminal-btn").addEventListener("click", () => TerminalManager.hide());
-
-// Terminal Input Logic (Native Bridge)
-const terminalInput = document.getElementById("terminal-input");
-if(terminalInput) {
-  terminalInput.addEventListener("keydown", async (e) => {
-    if(e.key === "Enter") {
-      const cmd = e.target.value;
-      if(!cmd.trim()) return;
-      e.target.value = "";
-      TerminalManager.print(cmd, "user");
-      
-      if(Capacitor.isNativePlatform()) {
-         try {
-            const res = await PRootPlugin.executeCommand({ command: cmd });
-            if(res.output) TerminalManager.print(res.output);
-         } catch(err) {
-            TerminalManager.print(err.message || "Execution Failed", "error");
-         }
-      } else {
-         TerminalManager.print("PRoot Backend is only available in Native Android App.", "error");
-      }
-    }
-  });
-}
 
 // Webview Logic
 const webviewModal = document.getElementById("webview-modal");
@@ -401,7 +428,6 @@ document.getElementById("run-btn").addEventListener("click", () => {
 
   const active = FileManager.activeFile;
   if (active.endsWith(".html") || active.endsWith(".js") || active.endsWith(".css")) {
-    // Inject custom console interceptor so JS logs appear in our IDE terminal!
     const consoleInterceptor = `
       <script>
         const originalLog = console.log;
@@ -412,12 +438,11 @@ document.getElementById("run-btn").addEventListener("click", () => {
         window.onerror = function(msg, url, line) {
           window.parent.postMessage({ type: 'error', log: msg + ' at line ' + line }, '*');
         };
-      </script>
+      <\/script>
     `;
     let htmlContent = FileManager.getCurrentContent();
     if(active.endsWith(".html")) {
       htmlContent = htmlContent.replace("<head>", "<head>" + consoleInterceptor);
-      // fallback if no <head>
       if(!htmlContent.includes("<head>")) htmlContent = consoleInterceptor + htmlContent;
       webviewFrame.srcdoc = htmlContent;
       webviewModal.classList.remove("hidden");
@@ -425,23 +450,24 @@ document.getElementById("run-btn").addEventListener("click", () => {
       htmlContent = `${consoleInterceptor}<script>${htmlContent}<\/script>`;
       webviewFrame.srcdoc = htmlContent;
       TerminalManager.print(`Running ${active}...`);
-      // Hidden execution for JS, no modal pops up
     }
   } else if (active.endsWith(".py") || active.endsWith(".cpp")) {
-    TerminalManager.print(`Running ${active}...`);
+    TerminalManager.print(`Sending ${active} to Native Compiler...`);
+    // Instead of one-shot, we can pipe this into the active PRoot session
     if(Capacitor.isNativePlatform()) {
       const content = FileManager.getCurrentContent();
-      // Basic simulation of sending code to native compiler
-      const safeContent = content.replace(/"/g, '\\"').replace(/\n/g, ' ');
-      let cmd = active.endsWith(".py") ? `python3 -c "${safeContent}"` : `g++ source.cpp && ./a.out`;
+      const safeContent = content.replace(/'/g, "'\\''");
+      // Write file into alpine root using echo
+      PRootPlugin.writeData({ data: `cat << 'EOF' > /root/${active}\n${content}\nEOF\n` });
       
-      PRootPlugin.executeCommand({ command: cmd }).then(res => {
-         if(res.output) TerminalManager.print(res.output);
-      }).catch(err => {
-         TerminalManager.print(err.message || "Error", "error");
-      });
+      // Run it
+      let cmd = active.endsWith(".py") ? `python3 /root/${active}\n` : `g++ /root/${active} && ./a.out\n`;
+      setTimeout(() => {
+        PRootPlugin.writeData({ data: cmd });
+        TerminalManager.show();
+      }, 500);
     } else {
-      TerminalManager.print("Local Compiler / PRoot not connected in Browser mode.", "error");
+      TerminalManager.print("Compiler not connected in Browser mode.", "error");
     }
   } else {
     TerminalManager.print(`Cannot run ${active}. Unknown format.`, "error");
@@ -450,7 +476,6 @@ document.getElementById("run-btn").addEventListener("click", () => {
 
 document.getElementById("close-webview-btn").addEventListener("click", () => webviewModal.classList.add("hidden"));
 
-// Listen for Webview Console Logs
 window.addEventListener("message", (e) => {
   if (e.data && e.data.type === 'console') {
     TerminalManager.print(`[Browser] ${e.data.log}`);
@@ -462,11 +487,10 @@ window.addEventListener("message", (e) => {
 
 
 // ==========================================
-// 5. UI MANAGER (Sidebar, Dropdowns, Viewport)
+// 5. UI MANAGER & KEYBOARD FIXES
 // ==========================================
 const UIManager = {
   init() {
-    // Sidebar Panels
     const icons = document.querySelectorAll(".activity-icon");
     const panels = document.querySelectorAll(".side-panel");
     
@@ -481,7 +505,6 @@ const UIManager = {
       });
     });
 
-    // Dropdowns
     const toggleDropdown = (btnId, dropId) => {
       const btn = document.getElementById(btnId);
       const drop = document.getElementById(dropId);
@@ -500,7 +523,6 @@ const UIManager = {
       document.querySelectorAll(".dropdown-menu").forEach(d => d.classList.add("hidden"));
     });
 
-    // Plugins Panel logic (Real Fetch Engine)
     document.getElementById("install-plugin-btn").addEventListener("click", async () => {
       const url = document.getElementById("plugin-url").value;
       if (url) {
@@ -510,7 +532,6 @@ const UIManager = {
           if(!res.ok) throw new Error(`HTTP Error ${res.status}`);
           const code = await res.text();
           
-          // Secure Injection via script tag
           const script = document.createElement("script");
           script.textContent = code;
           document.body.appendChild(script);
@@ -527,7 +548,6 @@ const UIManager = {
       }
     });
 
-    // Hamburger Sidebar Toggle Fix
     const hamburgerBtn = document.getElementById("hamburger-btn");
     const leftSidebar = document.getElementById("left-sidebar");
     if(hamburgerBtn && leftSidebar) {
@@ -536,13 +556,8 @@ const UIManager = {
       });
     }
 
-    // Settings Logic
     this.setupSettings();
-
-    // Command Palette Logic
     this.setupCommandPalette();
-
-    // Visual Viewport & Sticky Modifiers
     this.setupMobileKeyboardFixes();
   },
 
@@ -552,9 +567,7 @@ const UIManager = {
     const results = document.getElementById("palette-results");
     const closeBtn = document.getElementById("close-palette-btn");
 
-    if (closeBtn) {
-      closeBtn.addEventListener("click", () => palette.classList.add("hidden"));
-    }
+    if (closeBtn) closeBtn.addEventListener("click", () => palette.classList.add("hidden"));
     
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "p") {
@@ -562,9 +575,7 @@ const UIManager = {
         palette.classList.toggle("hidden");
         if (!palette.classList.contains("hidden")) input.focus();
       }
-      if (e.key === "Escape") {
-        palette.classList.add("hidden");
-      }
+      if (e.key === "Escape") palette.classList.add("hidden");
     });
 
     results.addEventListener("click", (e) => {
@@ -594,7 +605,10 @@ const UIManager = {
     const termVal = document.getElementById("term-font-val");
     termSlider.addEventListener("input", (e) => {
       termVal.innerText = e.target.value;
-      document.getElementById("terminal-output").style.fontSize = e.target.value + "px";
+      if (TerminalManager.term) {
+        TerminalManager.term.options.fontSize = parseInt(e.target.value);
+        TerminalManager.fitAddon.fit();
+      }
     });
 
     document.getElementById("setting-theme-btn").addEventListener("click", () => {
@@ -613,57 +627,69 @@ const UIManager = {
   setupMobileKeyboardFixes() {
     const symbolBar = document.getElementById("symbol-bar-container");
     
-    // Docking logic for Virtual Keyboard
     if (window.visualViewport) {
       window.visualViewport.addEventListener("resize", () => {
-        // Adjust the bottom property so it sits exactly on top of the virtual keyboard
         const offset = window.innerHeight - window.visualViewport.height;
-        if(offset > 0) {
-          symbolBar.style.bottom = offset + "px";
-        } else {
-          symbolBar.style.bottom = "0px";
-        }
+        if(offset > 0) symbolBar.style.bottom = offset + "px";
+        else symbolBar.style.bottom = "0px";
       });
     }
 
-    // Symbol Toggles
     const toggleBtn = document.getElementById("symbol-toggle-btn");
     toggleBtn.addEventListener("click", () => {
       symbolBar.classList.toggle("collapsed");
       toggleBtn.textContent = symbolBar.classList.contains("collapsed") ? "⌃" : "⌄";
     });
 
-    // Modifiers State
     let modifiers = { ctrl: false, alt: false, shift: false, esc: false };
 
     document.querySelectorAll(".symbol-btn").forEach(btn => {
-      // Prevent focus loss when tapping symbols on mobile!
       btn.addEventListener("touchstart", (e) => e.preventDefault(), {passive: false});
       btn.addEventListener("mousedown", (e) => e.preventDefault());
 
       btn.addEventListener("click", (e) => {
         if (btn.classList.contains("modifier")) {
           const mod = btn.getAttribute("data-mod");
+          
+          if (mod === "esc") {
+             // Immediate Escape key press
+             if (!TerminalManager.panel.classList.contains("hidden")) {
+               if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ data: "\x1B" });
+             } else {
+               EditorManager.view.contentDOM.blur();
+             }
+             return;
+          }
+
           modifiers[mod] = !modifiers[mod];
           btn.classList.toggle("sticky-active", modifiers[mod]);
           return;
         }
         
-        // If it's a normal symbol, insert it
-        EditorManager.insertText(btn.textContent);
+        let char = btn.textContent;
+
+        // If Terminal is focused, route the symbol/char to Terminal directly
+        if (!TerminalManager.panel.classList.contains("hidden")) {
+            let code = char;
+            if (modifiers.ctrl && char.toLowerCase() === 'c') code = "\x03";
+            if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ data: code });
+        } else {
+            EditorManager.insertText(char);
+        }
       });
     });
 
-    // Listen to physical or virtual keyboard strokes to consume modifiers
+    // Handle physical keyboard or virtual keyboard typing for sticky Ctrl
     document.addEventListener("keydown", (e) => {
-      // If sticky Ctrl is active and user types 'a' -> Select All
-      if (modifiers.ctrl && e.key.toLowerCase() === 'a') {
-        e.preventDefault();
-        EditorManager.view.dispatch({ selection: { anchor: 0, head: EditorManager.view.state.doc.length }});
-        
-        // Reset sticky toggle after use (optional UX choice)
-        modifiers.ctrl = false;
-        document.querySelector('[data-mod="ctrl"]').classList.remove("sticky-active");
+      if (modifiers.ctrl) {
+        if (e.key.toLowerCase() === 'c') {
+          if (!TerminalManager.panel.classList.contains("hidden")) {
+            e.preventDefault();
+            if (Capacitor.isNativePlatform()) PRootPlugin.writeData({ data: "\x03" });
+            modifiers.ctrl = false;
+            document.querySelector('[data-mod="ctrl"]').classList.remove("sticky-active");
+          }
+        }
       }
     });
   }
@@ -674,4 +700,5 @@ const UIManager = {
 // ==========================================
 FileManager.init();
 EditorManager.init();
+TerminalManager.init();
 UIManager.init();
