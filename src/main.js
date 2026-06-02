@@ -7,7 +7,7 @@ import { python } from "@codemirror/lang-python";
 import { json } from "@codemirror/lang-json";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { Compartment } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -218,8 +218,47 @@ const FileManager = {
     for (let name in this.files) {
       const el = document.createElement("div");
       el.className = "file-item" + (name === this.activeFile ? " active" : "");
-      el.textContent = `📄 ${name}`;
-      el.addEventListener("click", () => this.openFile(name));
+      el.style.display = "flex";
+      el.style.alignItems = "center";
+      el.style.justifyContent = "space-between";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = `📄 ${name}`;
+      nameSpan.style.flex = "1";
+      nameSpan.style.overflow = "hidden";
+      nameSpan.style.textOverflow = "ellipsis";
+      nameSpan.style.whiteSpace = "nowrap";
+      nameSpan.addEventListener("click", () => this.openFile(name));
+
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "🗑️";
+      delBtn.title = "Delete file";
+      delBtn.style.cssText = "background:none;border:none;cursor:pointer;padding:0 4px;font-size:12px;opacity:0.5;flex-shrink:0;";
+      delBtn.addEventListener("mouseenter", () => delBtn.style.opacity = "1");
+      delBtn.addEventListener("mouseleave", () => delBtn.style.opacity = "0.5");
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (confirm(`Delete ${name}? This cannot be undone.`)) {
+          delete this.files[name];
+          if (this.fileStates) delete this.fileStates[name];
+          if (this.activeFile === name) {
+            const remaining = Object.keys(this.files);
+            this.activeFile = remaining.length ? remaining[0] : "";
+            if (this.activeFile) {
+              EditorManager.setContent(this.files[this.activeFile], this.activeFile);
+            } else {
+              EditorManager.setContent("", "");
+              document.getElementById("welcome-screen").classList.remove("hidden");
+            }
+          }
+          localStorage.setItem("codepocket_files", JSON.stringify(this.files));
+          this.renderSidebar();
+          TerminalManager.print(`Deleted ${name}`, "success");
+        }
+      });
+
+      el.appendChild(nameSpan);
+      el.appendChild(delBtn);
       list.appendChild(el);
     }
     document.getElementById("active-file-name").textContent = this.activeFile ? `- ${this.activeFile}` : "";
