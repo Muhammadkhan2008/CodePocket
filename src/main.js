@@ -203,10 +203,17 @@ const FileManager = {
     document.getElementById("dots-dropdown").classList.add("hidden");
   },
 
+  saveTimeout: null,
+
   updateCurrentContent(content) {
     if(this.activeFile) {
       this.files[this.activeFile] = content;
-      localStorage.setItem('codepocket_files', JSON.stringify(this.files));
+      
+      // Debounced auto-save (saves 1 second after you stop typing to prevent lag)
+      if (this.saveTimeout) clearTimeout(this.saveTimeout);
+      this.saveTimeout = setTimeout(() => {
+        localStorage.setItem('codepocket_files', JSON.stringify(this.files));
+      }, 1000);
     }
   },
 
