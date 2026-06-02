@@ -43,7 +43,10 @@ public class PRootPlugin extends Plugin {
                     notifyJS("system", "Extracting Alpine Linux...\r\n");
                     alpineDir.mkdirs();
                     Process tarProcess = Runtime.getRuntime().exec(new String[]{"tar", "-xzf", tarball.getAbsolutePath(), "-C", alpineDir.getAbsolutePath()});
-                    tarProcess.waitFor();
+                    int exitCode = tarProcess.waitFor();
+                    if (exitCode != 0) {
+                        throw new Exception("Tar extraction failed with exit code: " + exitCode);
+                    }
                     tarball.delete(); // Cleanup
                     
                     // Write nameserver to resolv.conf so internet works inside alpine
@@ -95,6 +98,7 @@ public class PRootPlugin extends Plugin {
 
         try {
             File filesDir = getContext().getFilesDir();
+            File cacheDir = getContext().getCacheDir();
             String alpinePath = new File(filesDir, "alpine").getAbsolutePath();
             
             // JNI Hack: Find the extracted libproot.so
@@ -111,6 +115,7 @@ public class PRootPlugin extends Plugin {
             pb.environment().put("TERM", "xterm-256color");
             pb.environment().put("HOME", "/root");
             pb.environment().put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+            pb.environment().put("PROOT_TMP_DIR", cacheDir.getAbsolutePath());
             pb.redirectErrorStream(true);
             
             Process currentProcess = pb.start();
