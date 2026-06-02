@@ -9,6 +9,11 @@ import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { Compartment, EditorState } from "@codemirror/state";
 import { autocompletion, closeBrackets, acceptCompletion } from "@codemirror/autocomplete";
+import * as prettier from "prettier/standalone";
+import prettierPluginBabel from "prettier/plugins/babel";
+import prettierPluginHtml from "prettier/plugins/html";
+import prettierPluginCss from "prettier/plugins/postcss";
+import prettierEstree from "prettier/plugins/estree";
 import { lintGutter } from "@codemirror/lint";
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Terminal } from 'xterm';
@@ -415,9 +420,34 @@ const EditorManager = {
           TerminalManager.print(`Word Wrap ${EditorManager.wordWrapOn ? "ON ✅" : "OFF"}`);
           break;
         }
-        case "format":
-          TerminalManager.print("Code formatted.");
+        case "format": {
+          const active = FileManager.activeFile;
+          const code = EditorManager.view.state.doc.toString();
+          const ext = active ? active.split('.').pop().toLowerCase() : 'js';
+          const parserMap = { js: 'babel', jsx: 'babel', ts: 'babel', tsx: 'babel', html: 'html', css: 'css', scss: 'css', less: 'css', json: 'json' };
+          const parser = parserMap[ext];
+          if (!parser) {
+            TerminalManager.print(`Format not supported for .${ext} files`, "error");
+            break;
+          }
+          const pluginMap = {
+            babel: [prettierPluginBabel, prettierEstree],
+            html: [prettierPluginHtml],
+            css: [prettierPluginCss],
+            json: [prettierPluginBabel, prettierEstree],
+          };
+          prettier.format(code, { parser, plugins: pluginMap[parser] || [prettierPluginBabel, prettierEstree], tabWidth: 2, semi: true, singleQuote: true })
+            .then(formatted => {
+              EditorManager.view.dispatch({
+                changes: { from: 0, to: EditorManager.view.state.doc.length, insert: formatted }
+              });
+              TerminalManager.print("Code formatted successfully!", "success");
+            })
+            .catch(err => {
+              TerminalManager.print(`Format error: ${err.message}`, "error");
+            });
           break;
+        }
         case "color":
           document.getElementById("native-color-picker").click();
           break;
