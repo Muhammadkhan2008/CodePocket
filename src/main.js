@@ -16,6 +16,7 @@ import prettierPluginCss from "prettier/plugins/postcss";
 import prettierEstree from "prettier/plugins/estree";
 import { lintGutter } from "@codemirror/lint";
 import { Capacitor, registerPlugin } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import 'xterm/css/xterm.css';
@@ -198,25 +199,40 @@ const FileManager = {
     });
   },
 
-  save() {
-    // Save to localStorage internally
+  async save() {
     localStorage.setItem('codepocket_files', JSON.stringify(this.files));
-    
-    // Trigger download/save prompt for the user
-    if (this.activeFile) {
-      const content = this.files[this.activeFile] || "";
-      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = this.activeFile;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
-      TerminalManager.print(`Exporting ${this.activeFile}...`);
-    } else {
+
+    if (!this.activeFile) {
       TerminalManager.print("No file active to save.", "error");
+      return;
     }
+
+    const content = this.files[this.activeFile] || "";
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await Filesystem.writeFile({
+          path: this.activeFile,
+          data: content,
+          directory: Directory.Documents,
+          recursive: true,
+        });
+        TerminalManager.print(`Saved ${this.activeFile} to device storage.`, "success");
+        return;
+      } catch (error) {
+        TerminalManager.print(`Native save failed, exporting instead: ${error.message}`, "error");
+      }
+    }
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = this.activeFile;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+    TerminalManager.print(`Exporting ${this.activeFile}...`);
   },
 
   renderSidebar() {
@@ -293,7 +309,7 @@ const FileManager = {
     } else {
       EditorManager.setContent(this.files[name], name);
     }
-  },,
+  },
 
   promptNewFile() {
     const name = prompt("File name (e.g. script.js):");
@@ -818,6 +834,7 @@ const UIManager = {
     }
 
     this.setupSettings();
+    this.setupSearchPanel();
     this.setupCommandPalette();
     this.setupMobileKeyboardFixes();
   },
@@ -854,58 +871,144 @@ const UIManager = {
   },
 
   setupSettings() {
+    const savedSettings = SettingsManager.load();
     const fontSlider = document.getElementById("setting-font-size");
     const fontVal = document.getElementById("font-size-val");
+    if (!fontSlider || !fontVal) return;
     fontSlider.addEventListener("input", (e) => {
       const fs = parseInt(e.target.value);
       fontVal.innerText = fs;
       document.documentElement.style.setProperty("--font-code", fs + "px");
-      document.querySelector(".cm-editor").style.fontSize = fs + "px";
+      const editor = document.querySelector(".cm-editor");
+      if (editor) editor.style.fontSize = fs + "px";
       SettingsManager.saveSetting('editorFontSize', fs);
     });
 
     const termSlider = document.getElementById("setting-term-font");
     const termVal = document.getElementById("term-font-val");
-    termSlider.addEventListener("input", (e) => {
-      termVal.innerText = e.target.value;
-      const newFontSize = parseInt(e.target.value);
-      Object.values(TerminalManager.terminals).forEach(({ term, fitAddon }) => {
-        term.options.fontSize = newFontSize;
-        if (fitAddon) fitAddon.fit();
+    if (termSlider && termVal) {
+      termSlider.addEventListener("input", (e) => {
+        termVal.innerText = e.target.value;
+        const newFontSize = parseInt(e.target.value);
+        Object.values(TerminalManager.terminals).forEach(({ term, fitAddon }) => {
+          term.options.fontSize = newFontSize;
+          if (fitAddon) fitAddon.fit();
+        });
+        SettingsManager.saveSetting('termFontSize', newFontSize);
       });
-      SettingsManager.saveSetting('termFontSize', newFontSize);
-    });
+    }
 
-    document.getElementById("setting-theme-btn").addEventListener("click", () => {
-      window.CodePocketAPI.UI.setTheme({
-        '--bg-base': '#000',
-        '--bg-editor': '#000',
-        '--bg-panel': '#111',
-        '--text-primary': '#fff',
-        '--accent': '#ffcc00',
-        '--border': '#333'
+    const themeBtn = document.getElementById("setting-theme-btn");
+    if (themeBtn) {
+      themeBtn.addEventListener("click", () => {
+        window.CodePocketAPI.UI.setTheme({
+          '--bg-base': '#000',
+          '--bg-editor': '#000',
+          '--bg-panel': '#111',
+          '--text-primary': '#fff',
+          '--accent': '#ffcc00',
+          '--border': '#333'
+        });
+        SettingsManager.saveSetting('theme', 'high-contrast');
+        TerminalManager.print("High Contrast Theme Applied!", "success");
       });
-      SettingsManager.saveSetting('theme', 'high-contrast');
-      TerminalManager.print("High Contrast Theme Applied!", "success");
-    });
+    }
 
-    // Apply restored settings to UI elements
     const editorFontEl = document.getElementById("setting-font-size");
-    const termFontEl = document.getElementById("setting-term-font-size");
+    const termFontEl = document.getElementById("setting-term-font");
     if (editorFontEl) {
       editorFontEl.value = savedSettings.editorFontSize;
       fontVal.innerText = savedSettings.editorFontSize;
-      document.getElementById("editor-container").style.fontSize = savedSettings.editorFontSize + "px";
+      const editorContainer = document.getElementById("editor-container");
+      if (editorContainer) editorContainer.style.fontSize = savedSettings.editorFontSize + "px";
     }
-    if (termFontEl) {
+    if (termFontEl && termVal) {
       termFontEl.value = savedSettings.termFontSize;
       termVal.innerText = savedSettings.termFontSize;
     }
-    // Restore word wrap
     if (savedSettings.wordWrap) {
       EditorManager.wordWrapOn = true;
       EditorManager.view.dispatch({
         effects: wrapCompartment.reconfigure(EditorView.lineWrapping)
+      });
+    }
+  },
+
+  setupSearchPanel() {
+    const searchInput = document.getElementById("search-query");
+    const searchBtn = document.getElementById("search-btn");
+    const searchResults = document.getElementById("search-results");
+    const replaceInput = document.getElementById("replace-query");
+    const replaceAllBtn = document.getElementById("replace-all-btn");
+    if (!searchInput || !searchBtn || !searchResults) return;
+
+    searchBtn.addEventListener("click", () => {
+      const query = searchInput.value.trim();
+      if (!query) {
+        searchResults.innerHTML = "<p style='color:var(--text-secondary);padding:8px'>Enter a search term above</p>";
+        return;
+      }
+      const isRegex = document.getElementById("search-regex")?.checked || false;
+      const isCaseSensitive = document.getElementById("search-case")?.checked || false;
+      let regex;
+      try {
+        regex = new RegExp(isRegex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), isCaseSensitive ? "g" : "gi");
+      } catch (e) {
+        searchResults.innerHTML = `<p style='color:var(--error)'>Invalid regex: ${e.message}</p>`;
+        return;
+      }
+
+      let totalMatches = 0;
+      let html = "";
+      for (const [filename, fileContent] of Object.entries(FileManager.files)) {
+        const lines = fileContent.split("\n");
+        const fileMatches = [];
+        lines.forEach((line, lineIdx) => {
+          regex.lastIndex = 0;
+          if (regex.test(line)) {
+            const highlighted = line.replace(regex, m => `<mark style='background:#ff0;color:#000'>${m}</mark>`);
+            fileMatches.push({ lineNum: lineIdx + 1, text: highlighted });
+            totalMatches++;
+          }
+        });
+        if (fileMatches.length > 0) {
+          html += `<div class=\"search-file-group\" style=\"margin-bottom:8px\">`;
+          html += `<div style=\"color:var(--accent);font-weight:bold;padding:4px 0;cursor:pointer\" onclick=\"FileManager.openFile('${filename}')\">📄 ${filename} (${fileMatches.length} match${fileMatches.length>1?'es':''})</div>`;
+          fileMatches.forEach(m => {
+            html += `<div class=\"search-result\" style=\"padding:2px 0 2px 12px;font-size:12px;cursor:pointer;border-left:2px solid var(--border)\" onclick=\"FileManager.openFile('${filename}')\" title=\"Line ${m.lineNum}: click to open\"><span style='color:var(--text-secondary)'>${m.lineNum}:</span> <code>${m.text}</code></div>`;
+          });
+          html += `</div>`;
+        }
+      }
+
+      if (totalMatches === 0) {
+        searchResults.innerHTML = `<p style='color:var(--text-secondary);padding:8px'>No results for "${query}"</p>`;
+      } else {
+        searchResults.innerHTML = `<p style='color:var(--text-secondary);padding:4px 0 8px'>${totalMatches} match${totalMatches>1?'es':''} in ${Object.keys(FileManager.files).length} files</p>` + html;
+      }
+    });
+
+    searchInput.addEventListener("keydown", e => { if (e.key === "Enter") searchBtn.click(); });
+
+    if (replaceAllBtn && replaceInput) {
+      replaceAllBtn.addEventListener("click", () => {
+        const query = searchInput.value.trim();
+        const replacement = replaceInput.value;
+        if (!query) return;
+        let totalReplaced = 0;
+        for (const filename of Object.keys(FileManager.files)) {
+          const before = FileManager.files[filename];
+          const after = before.split(query).join(replacement);
+          if (before !== after) {
+            totalReplaced += (before.split(query).length - 1);
+            FileManager.files[filename] = after;
+            if (FileManager.activeFile === filename) {
+              EditorManager.setContent(after, filename);
+            }
+          }
+        }
+        localStorage.setItem("codepocket_files", JSON.stringify(FileManager.files));
+        TerminalManager.print(`Replaced ${totalReplaced} occurrence${totalReplaced!==1?'s':''} of "${query}" with "${replacement}"`, totalReplaced ? "success" : "error");
       });
     }
   },
