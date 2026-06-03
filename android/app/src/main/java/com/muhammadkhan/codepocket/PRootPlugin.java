@@ -108,7 +108,7 @@ public class PRootPlugin extends Plugin {
                 } else {
                     // Fallback: bare shell
                     cmd = new String[]{"/bin/sh", "-i"};
-                    notifyListeners("terminal_output", buildOutput(sessionId, "\x1b[33m[WARN] PRoot not found, using system shell\x1b[0m\r\n"));
+                    notifyListeners("terminal_output", buildOutput(sessionId, "\u001B[33m[WARN] PRoot not found, using system shell\u001B[0m\r\n"));
                 }
 
                 ProcessBuilder pb = new ProcessBuilder(cmd);
