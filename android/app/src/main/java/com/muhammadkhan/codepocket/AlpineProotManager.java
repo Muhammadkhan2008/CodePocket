@@ -1,6 +1,7 @@
 package com.muhammadkhan.codepocket;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.AssetManager;
 import android.util.Log;
 
