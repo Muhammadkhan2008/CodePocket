@@ -14,56 +14,87 @@
 - Commit, push, pull
 - Branch management
 
-### 🐛 Advanced Debugging
-- Breakpoint support
-- Variable inspection
-- Call stack visualization
+### 🐛 Debugging Tools
+- Error highlighting
+- Runtime debugging
+- Code analysis
 
 ### 🐧 Alpine Linux Terminal
 - Full Linux environment
-- Python 3.12, Java 17, Node.js 20 pre-installed
-- GCC, Go, Rust support
+- Python, Java, Node.js pre-installed
+- GCC/G++ compiler support
 
-### 🔌 Plugin Marketplace
-- 12+ built-in plugins
-- Auto-install from URL
-- Custom plugin development
+### 🔌 Plugin System
+- Dynamic plugin loading
+- Custom themes
+- Extended functionality
 
-## 📦 Installation
+### 🎨 Enhanced UI
+- Catppuccin Mocha theme
+- Responsive design
+- Multi-panel layout
+
+## 📱 Build APK
 
 ### Prerequisites
-- Node.js 18+
-- Android Studio / Xcode
-- Capacitor CLI
-
-### Setup
 ```bash
-# Clone repository
+# 1. Install Node.js (v18+)
+node --version
+
+# 2. Install Java JDK 17
+java -version
+
+# 3. Install Android SDK
+# Download from: https://developer.android.com/studio#command-tools
+export ANDROID_HOME=/path/to/android-sdk
+
+# 4. Install dependencies
+npm install -g @capacitor/cli
+```
+
+### Build Steps
+```bash
+# 1. Clone repository
 git clone https://github.com/Muhammadkhan2008/CodePocket.git
 cd CodePocket
 
-# Install dependencies
+# 2. Install dependencies
 npm install
 
-# Build web assets
+# 3. Build web assets
 npm run build
 
-# Sync with native
-npx cap sync
+# 4. Sync Capacitor
+npx cap sync android
 
-# Run on Android
-npx cap run android
+# 5. Build APK
+cd android
+./gradlew assembleDebug
+
+# 6. APK will be at:
+# android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## 🚀 Building APK
+### Install APK
+```bash
+# Transfer to phone and install
+adb install android/app/build/outputs/apk/debug/app-debug.apk
+
+# Or directly on device
+# Copy APK to phone → Enable "Unknown Sources" → Install
+```
+
+## 🛠️ Development Setup
 
 ```bash
-# Generate release APK
-cd android
-./gradlew assembleRelease
+# Run in browser
+npm run dev
 
-# APK will be at:
-# android/app/build/outputs/apk/release/app-release.apk
+# Run on Android device
+npx cap run android
+
+# Run on iOS device
+npx cap run ios
 ```
 
 ## 📝 License
