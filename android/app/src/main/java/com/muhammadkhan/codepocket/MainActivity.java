@@ -8,7 +8,6 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Register all plugins
         registerPlugin(PRootPlugin.class);
-        registerPlugin(PluginEngine.class);
         super.onCreate(savedInstanceState);
     }
 }
