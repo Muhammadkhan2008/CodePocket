@@ -21,6 +21,20 @@ import { Terminal } from 'xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import 'xterm/css/xterm.css';
 
+// ====== NEW: Enhanced Language Support ======
+import { java } from "@codemirror/lang-java";
+import { rust } from "@codemirror/lang-rust";
+import { go } from "@codemirror/lang-go";
+import { php } from "@codemirror/lang-php";
+import { sql } from "@codemirror/lang-sql";
+import { yaml } from "@codemirror/lang-yaml";
+import { vue } from "@codemirror/lang-vue";
+
+// ====== NEW: AI Services Import ======
+import { AIService } from './services/ai-service.js';
+import { GitService } from './services/git-service.js';
+import { DebugService } from './services/debug-service.js';
+
 // Language map for runtime switching
 const LANGUAGE_MAP = {
   js: () => javascript(),
@@ -36,6 +50,17 @@ const LANGUAGE_MAP = {
   json: () => json(),
   md: () => markdown(),
   markdown: () => markdown(),
+  
+  // ====== NEW: Enhanced Language Support ======
+  java: () => java(),
+  rust: () => rust(),
+  rs: () => rust(),
+  go: () => go(),
+  php: () => php(),
+  sql: () => sql(),
+  yaml: () => yaml(),
+  yml: () => yaml(),
+  vue: () => vue(),
 };
 
 // Detect language from filename extension
@@ -54,8 +79,13 @@ const PRootPlugin = registerPlugin('PRootPlugin');
 // 1. GLOBAL CODEPOCKET API (For Plugins)
 // ==========================================
 window.CodePocketAPI = {
-  version: "1.0",
+  version: "2.0",
   customRunHandler: null,
+  
+  // ====== NEW: Enhanced API Features ======
+  ai: AIService,
+  git: GitService,
+  debug: DebugService,
   
   onRun(handlerFunction) {
     this.customRunHandler = handlerFunction;
