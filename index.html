@@ -17,6 +17,15 @@
       <ul id="palette-results">
         <li data-cmd="save">💾 Save File</li>
         <li data-cmd="format">✨ Format Code</li>
+        <li data-cmd="lint">🔍 Lint / Check Code</li>
+        <li data-cmd="metrics">📊 Code Metrics</li>
+        <li data-cmd="md-preview">📝 Markdown Preview</li>
+        <li data-cmd="new-file">📄 New File</li>
+        <li data-cmd="export">📦 Export Project</li>
+        <li data-cmd="ai">🤖 AI Assistant</li>
+        <li data-cmd="git">🐙 Git / GitHub</li>
+        <li data-cmd="ftp">📡 FTP / SFTP</li>
+        <li data-cmd="themes">🎨 Themes</li>
         <li data-cmd="settings">⚙️ Open Settings</li>
       </ul>
     </div>
@@ -42,6 +51,9 @@
             <button data-action="wordwrap">Toggle Word Wrap</button>
             <button data-action="newline">New Line</button>
             <button data-action="format">Format Code</button>
+            <button data-action="lint">🔍 Lint Code</button>
+            <button data-action="metrics">📊 Code Metrics</button>
+            <button data-action="markdown-preview">📝 MD Preview</button>
             <button data-action="color">Insert Color</button>
             <div class="divider"></div>
             <button data-action="cut">Cut</button>
@@ -82,11 +94,12 @@
             <button class="activity-icon active" data-panel="explorer" title="Explorer">📁</button>
             <button class="activity-icon" data-panel="search" title="Search">🔍</button>
             <button class="activity-icon" data-panel="ai" title="CodePocket AI">🤖</button>
+            <button class="activity-icon" data-panel="git" title="Git / GitHub">🐙</button>
+            <button class="activity-icon" data-panel="ftp" title="FTP / SFTP">📡</button>
+            <button class="activity-icon" data-panel="themes" title="Themes">🎨</button>
             <button class="activity-icon" data-panel="plugins" title="Plugins">🧩</button>
-            <button class="activity-icon" data-panel="notifications" title="Notifications">🔔</button>
           </div>
           <div class="activity-bottom">
-            <button class="activity-icon" data-panel="profile" title="Profile">👤</button>
             <button class="activity-icon" data-panel="settings" title="Settings">⚙️</button>
           </div>
         </nav>
@@ -163,44 +176,111 @@
           <!-- AI PANEL -->
           <div id="panel-ai" class="side-panel hidden">
             <div class="panel-header"><span>CODEPOCKET AI</span></div>
-            <div class="panel-content" style="flex:1; justify-content: space-between;">
-              <div id="ai-chat" class="chat-box">
-                <p class="system-msg">AI Ready. Ask me to write code!</p>
+            <div class="panel-content" style="flex:1;justify-content:space-between;gap:8px;">
+              <div style="background:var(--bg-panel);padding:8px;border-radius:6px;border:1px solid var(--border);">
+                <label style="display:block;font-size:11px;color:var(--text-secondary);margin-bottom:4px;">Provider</label>
+                <select id="ai-provider-select" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;font-family:var(--font-ui);">
+                  <option value="gemini">Gemini (Google)</option>
+                  <option value="openai">OpenAI (GPT)</option>
+                  <option value="openrouter">OpenRouter (Free)</option>
+                </select>
+                <input type="password" id="ai-key-input" placeholder="API Key..." style="margin-top:6px;width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;font-family:var(--font-ui);">
+                <button id="ai-save-key-btn" class="primary-btn" style="margin-top:6px;">💾 Save Key</button>
               </div>
-              <input type="text" id="ai-input" placeholder="Ask AI...">
+              <div id="ai-chat" class="chat-box" style="flex:1;overflow-y:auto;background:var(--bg-editor);border-radius:6px;padding:8px;min-height:100px;">
+                <p class="system-msg" style="color:var(--text-muted);font-size:12px;">AI Ready. Ask me to write code!</p>
+              </div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <button id="ai-fix-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">🔧 Fix</button>
+                <button id="ai-explain-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">💡 Explain</button>
+                <button id="ai-clear-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">🗑️ Clear</button>
+              </div>
+              <div style="display:flex;gap:4px;">
+                <input type="text" id="ai-input" placeholder="Ask AI... (Enter to send)" style="flex:1;">
+                <button id="ai-send-btn" style="background:var(--accent);border:none;color:var(--bg-base);padding:8px 12px;border-radius:4px;cursor:pointer;font-weight:600;">➤</button>
+              </div>
             </div>
           </div>
 
-          <!-- NOTIFICATIONS PANEL -->
-          <div id="panel-notifications" class="side-panel hidden">
-            <div class="panel-header"><span>NOTIFICATIONS</span></div>
-            <div class="panel-content">
-              <div class="info-text">No new notifications.</div>
+          <!-- GIT PANEL -->
+          <div id="panel-git" class="side-panel hidden">
+            <div class="panel-header"><span>GIT / GITHUB</span></div>
+            <div class="panel-content" style="gap:8px;">
+              <div style="background:var(--bg-panel);padding:8px;border-radius:6px;border:1px solid var(--border);">
+                <input type="password" id="git-token" placeholder="GitHub Token..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="text" id="git-owner" placeholder="Username / Org..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="text" id="git-repo" placeholder="Repository name..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="text" id="git-branch" placeholder="Branch (default: main)" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px;">
+                <button id="git-connect-btn" class="primary-btn">🔗 Connect</button>
+              </div>
+              <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                <button id="git-status-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">📋 Status</button>
+                <button id="git-push-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">⬆️ Push</button>
+                <button id="git-commits-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">📜 Commits</button>
+              </div>
+              <div style="display:flex;gap:4px;">
+                <input type="text" id="git-path" placeholder="Path (empty = root)" style="flex:1;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;">
+                <button id="git-list-btn" style="background:var(--accent);border:none;color:var(--bg-base);padding:6px 10px;border-radius:4px;cursor:pointer;font-size:11px;">List</button>
+              </div>
+              <div id="git-file-tree" style="max-height:200px;overflow-y:auto;background:var(--bg-editor);border-radius:6px;padding:4px;"></div>
+            </div>
+          </div>
+
+          <!-- FTP PANEL -->
+          <div id="panel-ftp" class="side-panel hidden">
+            <div class="panel-header"><span>FTP / SFTP</span></div>
+            <div class="panel-content" style="gap:8px;">
+              <select id="ftp-profile-select" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;">
+                <option value="">-- Load Profile --</option>
+              </select>
+              <div style="background:var(--bg-panel);padding:8px;border-radius:6px;border:1px solid var(--border);">
+                <select id="ftp-protocol" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                  <option value="ftp">FTP</option>
+                  <option value="sftp">SFTP</option>
+                  <option value="ftps">FTPS</option>
+                </select>
+                <input type="text" id="ftp-host" placeholder="Host / IP..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="number" id="ftp-port" placeholder="Port (21)" value="21" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="text" id="ftp-user" placeholder="Username..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="password" id="ftp-pass" placeholder="Password..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px;">
+                <div style="display:flex;gap:4px;">
+                  <button id="ftp-connect-btn" class="primary-btn" style="flex:1;">🔗 Connect</button>
+                  <button id="ftp-disconnect-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:8px;border-radius:4px;cursor:pointer;">✖ Disconnect</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:4px;">
+                <input type="text" id="ftp-path" placeholder="Path (default: /)" value="/" style="flex:1;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;">
+                <button id="ftp-list-btn" style="background:var(--accent);border:none;color:var(--bg-base);padding:6px 10px;border-radius:4px;cursor:pointer;font-size:11px;">List</button>
+              </div>
+              <div id="ftp-file-tree" style="max-height:180px;overflow-y:auto;background:var(--bg-editor);border-radius:6px;padding:4px;"></div>
+              <div style="display:flex;gap:4px;">
+                <button id="ftp-upload-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:8px;border-radius:4px;cursor:pointer;font-size:11px;">⬆️ Upload Active File</button>
+                <button id="ftp-save-profile-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:8px;border-radius:4px;cursor:pointer;font-size:11px;">💾 Save Profile</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- THEMES PANEL -->
+          <div id="panel-themes" class="side-panel hidden">
+            <div class="panel-header"><span>THEMES</span></div>
+            <div class="panel-content" style="gap:4px;">
+              <div id="theme-list"></div>
             </div>
           </div>
 
           <!-- SETTINGS PANEL -->
           <div id="panel-settings" class="side-panel hidden">
             <div class="panel-header"><span>SETTINGS</span></div>
-            <div class="panel-content" style="gap: 15px;">
-              <div style="background:var(--bg-panel); padding:10px; border-radius:8px; border:1px solid var(--border);">
-                <label style="display:block; margin-bottom:5px; font-size:12px; color:var(--text-primary);">Editor Font Size (<span id="font-size-val">14</span>px)</label>
+            <div class="panel-content" style="gap:15px;">
+              <div style="background:var(--bg-panel);padding:10px;border-radius:8px;border:1px solid var(--border);">
+                <label style="display:block;margin-bottom:5px;font-size:12px;color:var(--text-primary);">Editor Font Size (<span id="font-size-val">14</span>px)</label>
                 <input type="range" id="setting-font-size" min="10" max="24" value="14" style="width:100%">
               </div>
-              <div style="background:var(--bg-panel); padding:10px; border-radius:8px; border:1px solid var(--border);">
-                <label style="display:block; margin-bottom:5px; font-size:12px; color:var(--text-primary);">Terminal Font Size (<span id="term-font-val">12</span>px)</label>
+              <div style="background:var(--bg-panel);padding:10px;border-radius:8px;border:1px solid var(--border);">
+                <label style="display:block;margin-bottom:5px;font-size:12px;color:var(--text-primary);">Terminal Font Size (<span id="term-font-val">12</span>px)</label>
                 <input type="range" id="setting-term-font" min="10" max="20" value="12" style="width:100%">
               </div>
-              <button class="secondary-btn" id="setting-theme-btn" style="width:100%; padding:10px; margin-top:10px;">Toggle High Contrast Theme</button>
-            </div>
-          </div>
-
-          <!-- PROFILE PANEL -->
-          <div id="panel-profile" class="side-panel hidden">
-            <div class="panel-header"><span>PROFILE</span></div>
-            <div class="panel-content">
-              <div class="info-text" style="text-align:center; margin-bottom:10px;">Not logged in.</div>
-              <button class="primary-btn">Login with GitHub</button>
+              <button id="setting-export-btn" class="secondary-btn" style="width:100%;padding:10px;">📦 Export All Files</button>
             </div>
           </div>
           
