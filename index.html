@@ -95,11 +95,12 @@
             <button class="activity-icon" data-panel="search" title="Search">🔍</button>
             <button class="activity-icon" data-panel="ai" title="CodePocket AI">🤖</button>
             <button class="activity-icon" data-panel="git" title="Git / GitHub">🐙</button>
-            <button class="activity-icon" data-panel="ftp" title="FTP / SFTP">📡</button>
+            <button class="activity-icon" data-panel="ftp" title="FTP / WebDAV">📡</button>
             <button class="activity-icon" data-panel="themes" title="Themes">🎨</button>
             <button class="activity-icon" data-panel="plugins" title="Plugins">🧩</button>
           </div>
           <div class="activity-bottom">
+            <button class="activity-icon" data-panel="profile" title="Profile">👤</button>
             <button class="activity-icon" data-panel="settings" title="Settings">⚙️</button>
           </div>
         </nav>
@@ -142,34 +143,37 @@
 
           <!-- PLUGINS PANEL -->
           <div id="panel-plugins" class="side-panel hidden">
-            <div class="panel-header"><span>PLUGIN STORE</span></div>
+            <div class="panel-header"><span>PLUGINS</span></div>
             <div class="panel-content">
-              <input type="text" id="plugin-url" placeholder="GitHub Raw URL (.js)">
-              <button id="install-plugin-btn" class="primary-btn" style="margin-top: 5px;">📥 Install from URL</button>
-              
-              <h4 style="color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase; margin-bottom:10px;">Marketplace</h4>
-              
-              <div id="demo-plugins-list" style="padding-right:5px; display:flex; flex-direction:column; gap:5px;">
-                <div class="plugin-card"><div class="plugin-icon">🪄</div><div class="plugin-info"><h4>Autocomplete</h4><p>Advanced code completion.</p><small>repo: dev/autocomplete</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/autocomplete.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">🤖</div><div class="plugin-info"><h4>AI Autosuggest</h4><p>Smart line suggestions.</p><small>repo: ai/autosuggest</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/autosuggest.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">⚛️</div><div class="plugin-info"><h4>React Snippets</h4><p>Insert React components.</p><small>repo: codepocket/react</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/react-snippets.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">🧛</div><div class="plugin-info"><h4>Dracula Theme</h4><p>Dark mode for vampires.</p><small>repo: dracula/theme</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/dracula-theme.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">🟡</div><div class="plugin-info"><h4>Monokai Theme</h4><p>Classic warm theme.</p><small>repo: monokai/theme</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/monokai-theme.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">👨‍💻</div><div class="plugin-info"><h4>Hacker Mode</h4><p>Matrix style terminal UI.</p><small>repo: tools/hacker</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/hacker-mode.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">🦜</div><div class="plugin-info"><h4>Party Parrot</h4><p>Dancing parrot in sidebar.</p><small>repo: cult/parrot</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/dancing-parrot.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">📊</div><div class="plugin-info"><h4>Word Counter</h4><p>Track lines and characters.</p><small>repo: utils/counter</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/word-counter.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">⏰</div><div class="plugin-info"><h4>Live Clock</h4><p>Clock injected in header.</p><small>repo: ui/clock</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/live-clock.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">🗑️</div><div class="plugin-info"><h4>Clear Terminal</h4><p>Command to clean logs.</p><small>repo: term/clear</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/clear-terminal.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">🔠</div><div class="plugin-info"><h4>Uppercase Tool</h4><p>Convert code to CAPS.</p><small>repo: edit/uppercase</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/uppercase-text.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">🤣</div><div class="plugin-info"><h4>Joke Generator</h4><p>Dev jokes in terminal.</p><small>repo: fun/jokes</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value=window.location.origin+'/plugins/joke-generator.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
-                <div class="plugin-card"><div class="plugin-icon">🕒</div><div class="plugin-info"><h4>Moment.js</h4><p>Loads from raw.github.</p><small>repo: moment/moment</small></div><button class="install-btn" onclick="document.getElementById('plugin-url').value='https://raw.githubusercontent.com/moment/moment/develop/min/moment.min.js'; document.getElementById('install-plugin-btn').click()">Install</button></div>
+              <div style="background:var(--bg-panel);padding:8px;border-radius:6px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary);margin-bottom:8px;">
+                💡 Paste a GitHub Raw URL of a .js plugin file and press Install
+              </div>
+              <input type="text" id="plugin-url" placeholder="https://raw.githubusercontent.com/user/repo/main/plugin.js">
+              <button id="install-plugin-btn" class="primary-btn" style="margin-top:5px;width:100%;">📥 Install from URL</button>
+
+              <div class="divider" style="margin:10px 0;"></div>
+              <h4 style="color:var(--text-secondary);font-size:0.8rem;text-transform:uppercase;margin-bottom:8px;">Working Plugins</h4>
+              <div style="display:flex;flex-direction:column;gap:5px;">
+                <div class="plugin-card">
+                  <div class="plugin-icon">🕒</div>
+                  <div class="plugin-info"><h4>Moment.js</h4><p>Date/time library.</p></div>
+                  <button class="install-btn" onclick="document.getElementById('plugin-url').value='https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js';document.getElementById('install-plugin-btn').click()">Install</button>
+                </div>
+                <div class="plugin-card">
+                  <div class="plugin-icon">🔧</div>
+                  <div class="plugin-info"><h4>Lodash</h4><p>JS utility library.</p></div>
+                  <button class="install-btn" onclick="document.getElementById('plugin-url').value='https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.21/lodash.min.js';document.getElementById('install-plugin-btn').click()">Install</button>
+                </div>
+                <div class="plugin-card">
+                  <div class="plugin-icon">📊</div>
+                  <div class="plugin-info"><h4>Chart.js</h4><p>Charts & graphs.</p></div>
+                  <button class="install-btn" onclick="document.getElementById('plugin-url').value='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';document.getElementById('install-plugin-btn').click()">Install</button>
+                </div>
               </div>
 
-              <div class="divider" style="margin: 10px 0;"></div>
-              <h4 style="color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase;">Installed</h4>
-              <ul id="plugin-list" class="styled-list">
-                <!-- Installed plugins -->
-              </ul>
+              <div class="divider" style="margin:10px 0;"></div>
+              <h4 style="color:var(--text-secondary);font-size:0.8rem;text-transform:uppercase;">Installed</h4>
+              <ul id="plugin-list" class="styled-list"></ul>
             </div>
           </div>
 
@@ -206,43 +210,59 @@
           <div id="panel-git" class="side-panel hidden">
             <div class="panel-header"><span>GIT / GITHUB</span></div>
             <div class="panel-content" style="gap:8px;">
+              <div style="background:var(--bg-panel);padding:8px;border-radius:6px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary);">
+                💡 <strong>How to use:</strong><br>
+                1. Go to github.com → Settings → Developer → Tokens<br>
+                2. Create token with <code>repo</code> permission<br>
+                3. Enter token + your username + repo name<br>
+                4. Press Connect, then List to browse files
+              </div>
               <div style="background:var(--bg-panel);padding:8px;border-radius:6px;border:1px solid var(--border);">
-                <input type="password" id="git-token" placeholder="GitHub Token..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
-                <input type="text" id="git-owner" placeholder="Username / Org..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
-                <input type="text" id="git-repo" placeholder="Repository name..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <label style="font-size:11px;color:var(--text-secondary);">GitHub Token (ghp_...)</label>
+                <input type="password" id="git-token" placeholder="ghp_xxxxxxxxxxxx" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-top:3px;margin-bottom:4px;">
+                <label style="font-size:11px;color:var(--text-secondary);">Your GitHub Username</label>
+                <input type="text" id="git-owner" placeholder="e.g. Muhammadkhan2008" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-top:3px;margin-bottom:4px;">
+                <label style="font-size:11px;color:var(--text-secondary);">Repository Name</label>
+                <input type="text" id="git-repo" placeholder="e.g. CodePocket" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-top:3px;margin-bottom:4px;">
                 <input type="text" id="git-branch" placeholder="Branch (default: main)" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px;">
-                <button id="git-connect-btn" class="primary-btn">🔗 Connect</button>
+                <button id="git-connect-btn" class="primary-btn">🔗 Connect to GitHub</button>
               </div>
               <div style="display:flex;gap:4px;flex-wrap:wrap;">
                 <button id="git-status-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">📋 Status</button>
-                <button id="git-push-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">⬆️ Push</button>
-                <button id="git-commits-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">📜 Commits</button>
+                <button id="git-push-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">⬆️ Push File</button>
+                <button id="git-commits-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:6px;border-radius:4px;cursor:pointer;font-size:11px;">📜 History</button>
               </div>
               <div style="display:flex;gap:4px;">
-                <input type="text" id="git-path" placeholder="Path (empty = root)" style="flex:1;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;">
-                <button id="git-list-btn" style="background:var(--accent);border:none;color:var(--bg-base);padding:6px 10px;border-radius:4px;cursor:pointer;font-size:11px;">List</button>
+                <input type="text" id="git-path" placeholder="Folder path (empty = root)" style="flex:1;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;">
+                <button id="git-list-btn" style="background:var(--accent);border:none;color:var(--bg-base);padding:6px 10px;border-radius:4px;cursor:pointer;font-size:11px;">📂 List</button>
               </div>
-              <div id="git-file-tree" style="max-height:200px;overflow-y:auto;background:var(--bg-editor);border-radius:6px;padding:4px;"></div>
+              <div id="git-file-tree" style="max-height:180px;overflow-y:auto;background:var(--bg-editor);border-radius:6px;padding:4px;font-size:12px;"></div>
             </div>
           </div>
 
           <!-- FTP PANEL -->
           <div id="panel-ftp" class="side-panel hidden">
-            <div class="panel-header"><span>FTP / SFTP</span></div>
+            <div class="panel-header"><span>FTP / WebDAV</span></div>
             <div class="panel-content" style="gap:8px;">
+              <div style="background:var(--bg-panel);padding:8px;border-radius:6px;border:1px solid var(--border);font-size:11px;color:var(--text-secondary);">
+                💡 <strong>Supported servers:</strong><br>
+                • WebDAV (Nextcloud, ownCloud, etc.)<br>
+                • HTTP file servers<br>
+                • Protocol: <strong>http</strong> (port 80) or <strong>https</strong> (port 443)<br>
+                ⚠️ Note: Raw FTP not supported in browser. Use WebDAV.
+              </div>
               <select id="ftp-profile-select" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;">
-                <option value="">-- Load Profile --</option>
+                <option value="">-- Load Saved Profile --</option>
               </select>
               <div style="background:var(--bg-panel);padding:8px;border-radius:6px;border:1px solid var(--border);">
                 <select id="ftp-protocol" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
-                  <option value="ftp">FTP</option>
-                  <option value="sftp">SFTP</option>
-                  <option value="ftps">FTPS</option>
+                  <option value="http">HTTP (WebDAV)</option>
+                  <option value="https">HTTPS (WebDAV)</option>
                 </select>
-                <input type="text" id="ftp-host" placeholder="Host / IP..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
-                <input type="number" id="ftp-port" placeholder="Port (21)" value="21" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
-                <input type="text" id="ftp-user" placeholder="Username..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
-                <input type="password" id="ftp-pass" placeholder="Password..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px;">
+                <input type="text" id="ftp-host" placeholder="Server address (e.g. 192.168.1.100)" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="number" id="ftp-port" placeholder="Port (80 or 443)" value="80" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="text" id="ftp-user" placeholder="Username (if required)" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:4px;">
+                <input type="password" id="ftp-pass" placeholder="Password (if required)" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;margin-bottom:6px;">
                 <div style="display:flex;gap:4px;">
                   <button id="ftp-connect-btn" class="primary-btn" style="flex:1;">🔗 Connect</button>
                   <button id="ftp-disconnect-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:8px;border-radius:4px;cursor:pointer;">✖ Disconnect</button>
@@ -250,9 +270,9 @@
               </div>
               <div style="display:flex;gap:4px;">
                 <input type="text" id="ftp-path" placeholder="Path (default: /)" value="/" style="flex:1;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:6px;">
-                <button id="ftp-list-btn" style="background:var(--accent);border:none;color:var(--bg-base);padding:6px 10px;border-radius:4px;cursor:pointer;font-size:11px;">List</button>
+                <button id="ftp-list-btn" style="background:var(--accent);border:none;color:var(--bg-base);padding:6px 10px;border-radius:4px;cursor:pointer;font-size:11px;">📂 List</button>
               </div>
-              <div id="ftp-file-tree" style="max-height:180px;overflow-y:auto;background:var(--bg-editor);border-radius:6px;padding:4px;"></div>
+              <div id="ftp-file-tree" style="max-height:160px;overflow-y:auto;background:var(--bg-editor);border-radius:6px;padding:4px;font-size:12px;"></div>
               <div style="display:flex;gap:4px;">
                 <button id="ftp-upload-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:8px;border-radius:4px;cursor:pointer;font-size:11px;">⬆️ Upload Active File</button>
                 <button id="ftp-save-profile-btn" style="flex:1;background:var(--bg-hover);border:none;color:var(--text-primary);padding:8px;border-radius:4px;cursor:pointer;font-size:11px;">💾 Save Profile</button>
@@ -265,6 +285,30 @@
             <div class="panel-header"><span>THEMES</span></div>
             <div class="panel-content" style="gap:4px;">
               <div id="theme-list"></div>
+            </div>
+          </div>
+
+          <!-- PROFILE PANEL -->
+          <div id="panel-profile" class="side-panel hidden">
+            <div class="panel-header"><span>PROFILE</span></div>
+            <div class="panel-content" style="gap:12px;">
+              <div style="text-align:center;padding:16px 0;">
+                <div style="width:60px;height:60px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 10px;">👤</div>
+                <div id="profile-display-name" style="font-size:15px;font-weight:600;color:var(--text-primary);">Your Name</div>
+                <div id="profile-display-email" style="font-size:12px;color:var(--text-muted);">Not set</div>
+              </div>
+              <div style="background:var(--bg-panel);padding:10px;border-radius:8px;border:1px solid var(--border);">
+                <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:3px;">Display Name</label>
+                <input type="text" id="profile-name" placeholder="Your name..." style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:7px;margin-bottom:8px;">
+                <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:3px;">Email (for Git commits)</label>
+                <input type="email" id="profile-email" placeholder="you@example.com" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:7px;margin-bottom:8px;">
+                <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:3px;">GitHub Username</label>
+                <input type="text" id="profile-github" placeholder="github.com/username" style="width:100%;background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:7px;margin-bottom:8px;">
+                <button id="profile-save-btn" class="primary-btn" style="width:100%;">💾 Save Profile</button>
+              </div>
+              <div id="profile-stats" style="background:var(--bg-panel);padding:10px;border-radius:8px;border:1px solid var(--border);font-size:12px;color:var(--text-secondary);">
+                📊 Loading stats...
+              </div>
             </div>
           </div>
 
