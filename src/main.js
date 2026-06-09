@@ -44,7 +44,10 @@ import { ThemeService } from './services/theme-service.js';
 const LANGUAGE_MAP={js:()=>javascript(),ts:()=>javascript({typescript:true}),jsx:()=>javascript({jsx:true}),tsx:()=>javascript({jsx:true,typescript:true}),html:()=>html(),css:()=>css(),cpp:()=>cpp(),c:()=>cpp(),py:()=>python(),python:()=>python(),json:()=>json(),md:()=>markdown(),markdown:()=>markdown(),java:()=>java(),rust:()=>rust(),rs:()=>rust(),go:()=>go(),php:()=>php(),sql:()=>sql(),yaml:()=>yaml(),yml:()=>yaml(),vue:()=>vue(),xml:()=>xml(),svg:()=>xml(),less:()=>less(),scss:()=>sass(),sass:()=>sass()};
 function detectLanguage(f=''){const ext=(f.split('.').pop()||'').toLowerCase();return(LANGUAGE_MAP[ext]||LANGUAGE_MAP['js'])();}
 const languageCompartment=new Compartment(),wrapCompartment=new Compartment(),themeCompartment=new Compartment();
-const PRootPlugin=registerPlugin('PRootPlugin');
+// PRootPlugin - only available on Android native build
+let PRootPlugin = null;
+try { PRootPlugin = registerPlugin('PRootPlugin'); } catch(e) { PRootPlugin = null; }
+const isNative = () => { try { return Capacitor.isNativePlatform(); } catch(e) { return false; } };
 function renderMarkdown(t){return t.replace(/^### (.+)$/gm,'<h3 style="color:var(--accent)">'+'$1'+'</h3>').replace(/^## (.+)$/gm,'<h2 style="color:var(--accent)">'+'$1'+'</h2>').replace(/^# (.+)$/gm,'<h1 style="color:var(--accent)">'+'$1'+'</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>'+'$1'+'</strong>').replace(/\*(.+?)\*/g,'<em>'+'$1'+'</em>').replace(/\n\n/g,'<br><br>');}
 window.CodePocketAPI={version:'2.0',customRunHandler:null,ai:AIService,git:GitService,debug:DebugService,ftp:FTPService,storage:StorageService,theme:ThemeService,onRun(fn){this.customRunHandler=fn;},getCode(){return FileManager.getCurrentContent();},setCode(t){EditorManager.setContent(t,FileManager.activeFile);},print(t,type='system'){TerminalManager.print(t,type);},UI:{setTheme(c){for(const[k,v]of Object.entries(c))document.documentElement.style.setProperty(k,v);},addSidebarPanel(id,title,icon,htmlContent){const nav=document.querySelector('.activity-top');const btn=document.createElement('button');btn.className='activity-icon plugin-icon';btn.setAttribute('data-panel',id);btn.title=title;btn.innerHTML=icon;nav.appendChild(btn);const panel=document.createElement('div');panel.id='panel-'+id;panel.className='side-panel hidden';panel.innerHTML='<div class="panel-header"><span>'+title.toUpperCase()+'</span></div><div class="panel-content">'+htmlContent+'</div>';document.getElementById('secondary-panel').appendChild(panel);btn.addEventListener('click',()=>{document.querySelectorAll('.activity-icon').forEach(i=>i.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.side-panel').forEach(p=>p.classList.add('hidden'));panel.classList.remove('hidden');});}},Commands:{register(id,title,cb){UIManager.customCommands=UIManager.customCommands||{};UIManager.customCommands[id]=cb;const li=document.createElement('li');li.setAttribute('data-cmd',id);li.innerHTML='🔌 '+title;document.getElementById('palette-results').appendChild(li);}}};
 
@@ -83,9 +86,21 @@ const FileManager={
   async save(){
     if(!this.activeFile)return TerminalManager.print('No active file.','error');
     const content=this.files[this.activeFile]||'';
-    const result=await StorageService.saveFile(this.activeFile,content);
-    if(result.ok){TerminalManager.print('✅ Saved: '+this.activeFile,'success');}
-    else{const blob=new Blob([content],{type:'text/plain;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=this.activeFile;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);TerminalManager.print('Exported: '+this.activeFile);}
+    try{
+      // Always save to localStorage (reliable)
+      const files=JSON.parse(localStorage.getItem('codepocket_files')||'{}');
+      files[this.activeFile]=content;
+      localStorage.setItem('codepocket_files',JSON.stringify(files));
+      // Also try IndexedDB via StorageService
+      await StorageService.saveFile(this.activeFile,content);
+      TerminalManager.print('✅ Saved: '+this.activeFile,'success');
+    }catch(e){
+      // Final fallback - download file
+      const blob=new Blob([content],{type:'text/plain;charset=utf-8'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=this.activeFile;
+      document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
+      TerminalManager.print('Downloaded: '+this.activeFile,'success');
+    }
   },
   _getIcon(name){const ext=(name.split('.').pop()||'').toLowerCase();return{js:'🟨',ts:'🔷',jsx:'⚛️',tsx:'⚛️',html:'🌐',css:'🎨',scss:'🎨',less:'🎨',py:'🐍',java:'☕',cpp:'⚙️',c:'⚙️',go:'🐹',rs:'🦀',php:'🐘',sql:'🗄️',json:'📋',md:'📝',yaml:'⚙️',vue:'💚',xml:'📄',txt:'📄'}[ext]||'📄';},
   renderSidebar(){
@@ -192,7 +207,12 @@ const TerminalManager={
   async init(){
     this.panel=document.getElementById('terminal-panel');this.container=document.getElementById('terminal-output');this.tabsContainer=document.getElementById('terminal-tabs');
     if(!this.container)return;this.container.innerHTML='';this.container.style.cssText='overflow:hidden;padding:0;';
-    if(window.Capacitor?.isNativePlatform()){PRootPlugin.addListener('terminal_output',info=>{if(this.terminals[info.sessionId])this.terminals[info.sessionId].term.write(info.data);});try{await PRootPlugin.initEnvironment();}catch(e){}}
+    if(isNative()&&PRootPlugin){
+      try{
+        PRootPlugin.addListener('terminal_output',info=>{if(this.terminals[info.sessionId])this.terminals[info.sessionId].term.write(info.data);});
+        await PRootPlugin.initEnvironment();
+      }catch(e){console.warn('PRoot init failed:',e.message);}
+    }
     this.createTerminal();
     document.getElementById('add-terminal-btn')?.addEventListener('click',()=>this.createTerminal());
   },
@@ -204,11 +224,30 @@ const TerminalManager={
     const term=new Terminal({theme:{background:'#0d0d0d',foreground:'#f8f8f2',cursor:'#f8f8f2'},fontSize:14,fontFamily:'Fira Code, Consolas, monospace',cursorBlink:true,scrollback:5000});
     const fitAddon=new FitAddon(),webLinksAddon=new WebLinksAddon();
     term.loadAddon(fitAddon);term.loadAddon(webLinksAddon);term.open(termContainer);
-    term.onData(data=>{if(window.Capacitor?.isNativePlatform())PRootPlugin.writeData({sessionId,data});else term.write(data);});
+    term.onData(data=>{
+      if(isNative() && PRootPlugin){
+        try{PRootPlugin.writeData({sessionId,data});}catch(e){term.write(data);}
+      }else{term.write(data);}
+    });
     this.terminals[sessionId]={term,fitAddon,tabEl,termContainer};
     tabEl.addEventListener('click',()=>this.switchTerminal(sessionId));this.switchTerminal(sessionId);
-    if(window.Capacitor?.isNativePlatform()){try{await PRootPlugin.startSession({sessionId});}catch(e){term.write('\x1b[31mError: '+e.message+'\x1b[0m\r\n');}}
-    else{term.writeln('\x1b[32mCodePocket v2.0 Terminal\x1b[0m');term.writeln('\x1b[33mUse Run ▶ to execute code\x1b[0m');term.writeln('');}
+    if(isNative() && PRootPlugin){
+      try{
+        await PRootPlugin.startSession({sessionId});
+        term.writeln('\x1b[32m✅ Alpine Linux Terminal Ready\x1b[0m');
+      }catch(e){
+        term.writeln('\x1b[33m⚠️  Alpine terminal unavailable\x1b[0m');
+        term.writeln('\x1b[36mUsing output console mode\x1b[0m');
+        term.writeln('\x1b[90mTip: Press Run ▶ to execute JS/HTML files\x1b[0m\r\n');
+      }
+    }else{
+      term.writeln('\x1b[32m╔══════════════════════════════╗\x1b[0m');
+      term.writeln('\x1b[32m║   CodePocket v2.0 Console    ║\x1b[0m');
+      term.writeln('\x1b[32m╚══════════════════════════════╝\x1b[0m');
+      term.writeln('\x1b[33mPress ▶ Run to execute JS/HTML files\x1b[0m');
+      term.writeln('\x1b[36mAlpine Linux terminal available in APK build\x1b[0m');
+      term.writeln('');
+    }
   },
   switchTerminal(sessionId){
     this.activeSessionId=sessionId;
@@ -235,8 +274,16 @@ document.getElementById('run-btn')?.addEventListener('click',async()=>{
     document.getElementById('webview-frame').srcdoc=hc;document.getElementById('webview-modal')?.classList.remove('hidden');TerminalManager.print('▶ Running '+active+'...');
   }else if(active.endsWith('.md')){EditorManager._toggleMarkdownPreview();}
   else if(active.endsWith('.py')||active.endsWith('.cpp')||active.endsWith('.c')){
-    if(Capacitor.isNativePlatform()){PRootPlugin.writeData({sessionId:TerminalManager.activeSessionId,data:"cat << 'CPEOF' > /root/"+active+'\n'+content+'\nCPEOF\n'});const cmd=active.endsWith('.py')?'python3 /root/'+active+'\n':'g++ /root/'+active+' -o /tmp/cp_out && /tmp/cp_out\n';setTimeout(()=>{PRootPlugin.writeData({sessionId:TerminalManager.activeSessionId,data:cmd});TerminalManager.show();},600);}
-    else TerminalManager.print('Native compiler not available in browser.','error');
+    if(isNative()&&PRootPlugin){
+      try{
+        PRootPlugin.writeData({sessionId:TerminalManager.activeSessionId,data:"cat << 'CPEOF' > /root/"+active+'\n'+content+'\nCPEOF\n'});
+        const cmd=active.endsWith('.py')?'python3 /root/'+active+'\n':'g++ /root/'+active+' -o /tmp/cp_out && /tmp/cp_out\n';
+        setTimeout(()=>{PRootPlugin.writeData({sessionId:TerminalManager.activeSessionId,data:cmd});TerminalManager.show();},600);
+      }catch(e){TerminalManager.print('Terminal error: '+e.message,'error');}
+    }else{
+      TerminalManager.print('🐧 Python/C++ compiler requires Android APK build with Alpine Linux.','warning');
+      TerminalManager.print('💡 For JS/HTML → use Run ▶ button','system');
+    }
   }else TerminalManager.print('Cannot run .'+active.split('.').pop()+' directly.','error');
 });
 document.getElementById('close-webview-btn')?.addEventListener('click',()=>{document.getElementById('webview-modal')?.classList.add('hidden');document.getElementById('webview-frame').srcdoc='';});
@@ -260,7 +307,7 @@ const UIManager={
     this._setupActivityBar();this._setupDropdowns();this._setupPlugins();
     this._setupSettings();this._setupSearch();this._setupCommandPalette();
     this._setupMobileKeys();this._setupFTPPanel();this._setupGitPanel();
-    this._setupAIPanel();this._setupThemePanel();
+    this._setupAIPanel();this._setupThemePanel();this._setupProfile();
     document.getElementById('hamburger-btn')?.addEventListener('click',()=>document.getElementById('left-sidebar')?.classList.toggle('hidden-mobile'));
   },
   _setupActivityBar(){
@@ -363,6 +410,40 @@ const UIManager={
   _setupThemePanel(){
     const container=document.getElementById('theme-list');if(!container)return;
     ThemeService.getList().forEach(t=>{const btn=document.createElement('button');btn.style.cssText='width:100%;text-align:left;padding:8px 12px;background:var(--bg-base);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);cursor:pointer;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;';btn.innerHTML='<span>'+t.label+'</span><span style="font-size:11px;color:var(--text-muted)">'+t.type+'</span>';btn.addEventListener('click',()=>{ThemeService.apply(t.id,EditorManager.view);TerminalManager.print('\u{1F3A8} Theme: '+t.label,'success');container.querySelectorAll('button').forEach(b=>b.style.border='1px solid var(--border)');btn.style.border='1px solid var(--accent)';});if(ThemeService.current===t.id)btn.style.border='1px solid var(--accent)';container.appendChild(btn);});
+  },
+
+  _setupProfile(){
+    // Load saved profile
+    const prof=JSON.parse(localStorage.getItem('cp_profile')||'{}');
+    const setVal=(id,v)=>{const el=document.getElementById(id);if(el&&v)el.value=v;};
+    setVal('profile-name',prof.name);setVal('profile-email',prof.email);setVal('profile-github',prof.github);
+    const dn=document.getElementById('profile-display-name');
+    const de=document.getElementById('profile-display-email');
+    if(dn)dn.textContent=prof.name||'Set your name';
+    if(de)de.textContent=prof.email||'Not set';
+
+    // Stats
+    const stats=document.getElementById('profile-stats');
+    if(stats){
+      const files=Object.keys(FileManager.files||{});
+      stats.innerHTML='📁 Files: <strong>'+files.length+'</strong><br>'+
+        '💾 Storage: <strong>'+(localStorage.getItem('codepocket_files')||'').length>1000?
+        Math.round((localStorage.getItem('codepocket_files')||'').length/1024)+' KB':'< 1 KB'+'</strong><br>'+
+        '🎨 Theme: <strong>'+(ThemeService.current||'catppuccin-mocha')+'</strong>';
+    }
+
+    document.getElementById('profile-save-btn')?.addEventListener('click',()=>{
+      const name=document.getElementById('profile-name')?.value?.trim();
+      const email=document.getElementById('profile-email')?.value?.trim();
+      const github=document.getElementById('profile-github')?.value?.trim();
+      const profile={name,email,github,savedAt:new Date().toLocaleDateString()};
+      localStorage.setItem('cp_profile',JSON.stringify(profile));
+      const dn=document.getElementById('profile-display-name');
+      const de=document.getElementById('profile-display-email');
+      if(dn)dn.textContent=name||'Your Name';
+      if(de)de.textContent=email||'Not set';
+      TerminalManager.print('✅ Profile saved!','success');
+    });
   },
 };
 
