@@ -1,32 +1,29 @@
 // ==========================================
-// STORAGE SERVICE - Multi-Backend Storage
+// STORAGE SERVICE - Fixed Implementation
 // ==========================================
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 
 export const StorageService = {
-  backend: 'localStorage', // 'localStorage' | 'capacitor' | 'indexeddb'
-  dbName: 'CodePocketDB',
+  backend: 'localStorage',
   db: null,
 
   async init() {
-    if (Capacitor.isNativePlatform()) {
-      this.backend = 'capacitor';
-    } else {
-      // Try IndexedDB for large file support in browser
-      try {
-        await this._initIndexedDB();
-        this.backend = 'indexeddb';
-      } catch(e) {
-        this.backend = 'localStorage';
-      }
+    // Try IndexedDB first
+    try {
+      await this._initIDB();
+      this.backend = 'indexeddb';
+    } catch(e) {
+      this.backend = 'localStorage';
     }
+    // Migrate from localStorage if needed
+    await this._migrate();
     return { ok: true, backend: this.backend };
   },
 
-  async _initIndexedDB() {
+  async _initIDB() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(this.dbName, 1);
+      const req = indexedDB.open('CodePocketDB', 2);
       req.onerror = () => reject(req.error);
       req.onsuccess = () => { this.db = req.result; resolve(); };
       req.onupgradeneeded = (e) => {
@@ -34,71 +31,66 @@ export const StorageService = {
         if (!db.objectStoreNames.contains('files')) {
           db.createObjectStore('files', { keyPath: 'path' });
         }
-        if (!db.objectStoreNames.contains('projects')) {
-          db.createObjectStore('projects', { keyPath: 'name' });
-        }
       };
     });
   },
 
+  async _migrate() {
+    // If there are files in localStorage, move to IndexedDB
+    try {
+      const lsData = localStorage.getItem('codepocket_files');
+      if (lsData && this.backend === 'indexeddb') {
+        const files = JSON.parse(lsData);
+        for (const [path, content] of Object.entries(files)) {
+          await this._idbPut({ path, content, modified: Date.now() });
+        }
+      }
+    } catch(e) {}
+  },
+
   async saveFile(path, content) {
     try {
-      if (this.backend === 'capacitor') {
-        await Filesystem.writeFile({
-          path, data: content,
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8,
-          recursive: true
-        });
-        return { ok: true, path, backend: 'capacitor' };
-      } else if (this.backend === 'indexeddb' && this.db) {
-        await this._idbPut('files', { path, content, modified: Date.now() });
-        return { ok: true, path, backend: 'indexeddb' };
-      } else {
-        const files = this._lsGetFiles();
+      if (this.backend === 'indexeddb' && this.db) {
+        await this._idbPut({ path, content, modified: Date.now() });
+        // Also keep localStorage in sync as backup
+        const files = this._lsGet();
         files[path] = content;
         localStorage.setItem('codepocket_files', JSON.stringify(files));
-        return { ok: true, path, backend: 'localStorage' };
+        return { ok: true };
       }
-    } catch (e) {
+      // localStorage fallback
+      const files = this._lsGet();
+      files[path] = content;
+      localStorage.setItem('codepocket_files', JSON.stringify(files));
+      return { ok: true };
+    } catch(e) {
       return { ok: false, error: e.message };
     }
   },
 
   async readFile(path) {
     try {
-      if (this.backend === 'capacitor') {
-        const result = await Filesystem.readFile({
-          path, directory: Directory.Documents, encoding: Encoding.UTF8
-        });
-        return { ok: true, content: result.data };
-      } else if (this.backend === 'indexeddb' && this.db) {
-        const record = await this._idbGet('files', path);
-        return record ? { ok: true, content: record.content } : { ok: false, error: 'File not found' };
-      } else {
-        const files = this._lsGetFiles();
-        return path in files ? { ok: true, content: files[path] } : { ok: false, error: 'File not found' };
+      if (this.backend === 'indexeddb' && this.db) {
+        const r = await this._idbGet(path);
+        if (r) return { ok: true, content: r.content };
       }
-    } catch (e) {
+      const files = this._lsGet();
+      return path in files ? { ok: true, content: files[path] } : { ok: false, error: 'Not found' };
+    } catch(e) {
       return { ok: false, error: e.message };
     }
   },
 
   async deleteFile(path) {
     try {
-      if (this.backend === 'capacitor') {
-        await Filesystem.deleteFile({ path, directory: Directory.Documents });
-        return { ok: true };
-      } else if (this.backend === 'indexeddb' && this.db) {
-        await this._idbDelete('files', path);
-        return { ok: true };
-      } else {
-        const files = this._lsGetFiles();
-        delete files[path];
-        localStorage.setItem('codepocket_files', JSON.stringify(files));
-        return { ok: true };
+      if (this.backend === 'indexeddb' && this.db) {
+        await this._idbDelete(path);
       }
-    } catch (e) {
+      const files = this._lsGet();
+      delete files[path];
+      localStorage.setItem('codepocket_files', JSON.stringify(files));
+      return { ok: true };
+    } catch(e) {
       return { ok: false, error: e.message };
     }
   },
@@ -106,70 +98,65 @@ export const StorageService = {
   async getAllFiles() {
     try {
       if (this.backend === 'indexeddb' && this.db) {
-        const records = await this._idbGetAll('files');
-        const files = {};
-        records.forEach(r => { files[r.path] = r.content; });
-        return { ok: true, files };
-      } else {
-        return { ok: true, files: this._lsGetFiles() };
+        const records = await this._idbGetAll();
+        if (records.length > 0) {
+          const files = {};
+          records.forEach(r => { files[r.path] = r.content; });
+          return { ok: true, files };
+        }
       }
-    } catch (e) {
-      return { ok: false, files: {}, error: e.message };
+      return { ok: true, files: this._lsGet() };
+    } catch(e) {
+      return { ok: true, files: this._lsGet() };
     }
   },
 
-  // Export all files as ZIP download
-  async exportProject(projectName = 'codepocket-project') {
+  async exportProject(name = 'codepocket-export') {
     const { files } = await this.getAllFiles();
-    const lines = [];
-    for (const [path, content] of Object.entries(files)) {
-      lines.push(`\n=== FILE: ${path} ===\n${content}`);
-    }
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const content = Object.entries(files)
+      .map(([p, c]) => `\n${'='.repeat(50)}\nFILE: ${p}\n${'='.repeat(50)}\n${c}`)
+      .join('\n');
+    const blob = new Blob([content], { type: 'text/plain' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${projectName}.txt`;
-    document.body.appendChild(a);
-    a.click();
+    a.download = name + '.txt';
+    document.body.appendChild(a); a.click();
     document.body.removeChild(a);
-    return { ok: true, message: `Exported ${Object.keys(files).length} files` };
+    URL.revokeObjectURL(a.href);
+    return { ok: true, message: '✅ Exported ' + Object.keys(files).length + ' files' };
   },
 
-  // IndexedDB helpers
-  _idbPut(store, value) {
-    return new Promise((res, rej) => {
-      const tx = this.db.transaction(store, 'readwrite');
-      const req = tx.objectStore(store).put(value);
-      req.onsuccess = () => res(req.result);
-      req.onerror = () => rej(req.error);
-    });
-  },
-  _idbGet(store, key) {
-    return new Promise((res, rej) => {
-      const tx = this.db.transaction(store, 'readonly');
-      const req = tx.objectStore(store).get(key);
-      req.onsuccess = () => res(req.result);
-      req.onerror = () => rej(req.error);
-    });
-  },
-  _idbDelete(store, key) {
-    return new Promise((res, rej) => {
-      const tx = this.db.transaction(store, 'readwrite');
-      const req = tx.objectStore(store).delete(key);
-      req.onsuccess = () => res();
-      req.onerror = () => rej(req.error);
-    });
-  },
-  _idbGetAll(store) {
-    return new Promise((res, rej) => {
-      const tx = this.db.transaction(store, 'readonly');
-      const req = tx.objectStore(store).getAll();
-      req.onsuccess = () => res(req.result || []);
-      req.onerror = () => rej(req.error);
-    });
-  },
-  _lsGetFiles() {
+  _lsGet() {
     try { return JSON.parse(localStorage.getItem('codepocket_files') || '{}'); }
     catch { return {}; }
+  },
+
+  _idbPut(val) {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('files', 'readwrite');
+      const r = tx.objectStore('files').put(val);
+      r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+    });
+  },
+  _idbGet(key) {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('files', 'readonly');
+      const r = tx.objectStore('files').get(key);
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+  },
+  _idbDelete(key) {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('files', 'readwrite');
+      const r = tx.objectStore('files').delete(key);
+      r.onsuccess = () => res(); r.onerror = () => rej(r.error);
+    });
+  },
+  _idbGetAll() {
+    return new Promise((res, rej) => {
+      const tx = this.db.transaction('files', 'readonly');
+      const r = tx.objectStore('files').getAll();
+      r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error);
+    });
   }
 };
