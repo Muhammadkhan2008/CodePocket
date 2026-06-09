@@ -3,24 +3,22 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "CodePocket - Powerful Mobile Code Editor",
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview",
-    "android": "npx cap sync android",
     "sync": "npx cap sync"
   },
   "devDependencies": {
-    "typescript": "~5.7.2",
-    "vite": "^5.4.0"
+    "typescript": "~6.0.2",
+    "vite": "^8.0.12"
   },
   "dependencies": {
-    "@capacitor/android": "^7.2.0",
-    "@capacitor/cli": "^7.2.0",
-    "@capacitor/core": "^7.2.0",
-    "@capacitor/filesystem": "^7.0.0",
-    "@capacitor/ios": "^7.2.0",
+    "@capacitor/android": "^8.3.4",
+    "@capacitor/cli": "^8.3.4",
+    "@capacitor/core": "^8.3.4",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/ios": "^8.3.4",
     "@codemirror/autocomplete": "^6.18.0",
     "@codemirror/commands": "^6.7.0",
     "@codemirror/lang-cpp": "^6.0.3",
