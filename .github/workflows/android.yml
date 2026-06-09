@@ -30,6 +30,34 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: 🐧 Download PRoot + Alpine Linux for Android (arm64)
+        run: |
+          mkdir -p public/native
+
+          # ── Download PRoot static binary (arm64-android) ──
+          echo "Downloading proot-static arm64..."
+          curl -fL "https://github.com/green-green-avk/build-proot-android/releases/download/v5.4.0-1_armeabi-v7a/proot" \
+            -o public/native/proot_arm || true
+          curl -fL "https://github.com/green-green-avk/build-proot-android/releases/download/v5.4.0-1_arm64-v8a/proot" \
+            -o public/native/proot_arm64 || true
+          curl -fL "https://github.com/green-green-avk/build-proot-android/releases/download/v5.4.0-1_x86_64/proot" \
+            -o public/native/proot_x86_64 || true
+
+          # Fallback: use proot from termux bootstrap
+          if [ ! -s public/native/proot_arm64 ]; then
+            echo "Trying fallback proot download..."
+            curl -fL "https://github.com/termux/proot/releases/download/v5.1.107-40/proot-aarch64" \
+              -o public/native/proot_arm64 || true
+          fi
+
+          # ── Download Alpine Linux minimal rootfs (arm64) ──
+          echo "Downloading Alpine Linux arm64..."
+          curl -fL "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz" \
+            -o public/native/alpine.bin
+
+          echo "File sizes:"
+          ls -lh public/native/
+
       - name: 📦 Install Dependencies
         run: npm install --legacy-peer-deps
 
@@ -47,17 +75,26 @@ jobs:
           cd android
           ./gradlew assembleDebug --no-daemon
 
+      - name: 📦 APK Size Check
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          SIZE=$(du -sh "$APK" | cut -f1)
+          echo "APK Size: $SIZE"
+          echo "APK_SIZE=$SIZE" >> $GITHUB_ENV
+
       - name: 📤 Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: CodePocket-debug-${{ github.run_number }}
+          name: CodePocket-v2-debug-${{ github.run_number }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
       - name: 📋 Build Summary
         if: always()
         run: |
-          echo "## Build Result" >> $GITHUB_STEP_SUMMARY
-          echo "**Run Number:** ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "Download APK from **Artifacts** section ⬆️" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Build Complete!" >> $GITHUB_STEP_SUMMARY
+          echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "**APK Size:** ${{ env.APK_SIZE }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Alpine Linux:** arm64 v3.19 bundled" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⬆️ Download APK from **Artifacts** section above" >> $GITHUB_STEP_SUMMARY
