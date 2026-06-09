@@ -220,7 +220,7 @@ public class PluginEngine {
     private void savePluginsConfig() {
         try {
             writeFile(pluginsConfigFile, pluginsConfig.toString(2));
-        } catch (IOException e) {
+        } catch (IOException | JSONException e) {
             Log.e(TAG, "Failed to save plugins config", e);
         }
     }
