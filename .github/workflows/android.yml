@@ -1,4 +1,4 @@
-name: 🚀 Build CodePocket APK
+name: Build CodePocket APK
 
 on:
   push:
@@ -15,86 +15,109 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: ☕ Setup Java 21
+      - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: 🟢 Setup Node.js 22
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
-      - name: 🐧 Download PRoot + Alpine Linux for Android (arm64)
+      - name: Download Alpine Linux + PRoot for Android
         run: |
           mkdir -p public/native
 
-          # ── Download PRoot static binary (arm64-android) ──
-          echo "Downloading proot-static arm64..."
-          curl -fL "https://github.com/green-green-avk/build-proot-android/releases/download/v5.4.0-1_armeabi-v7a/proot" \
-            -o public/native/proot_arm || true
-          curl -fL "https://github.com/green-green-avk/build-proot-android/releases/download/v5.4.0-1_arm64-v8a/proot" \
-            -o public/native/proot_arm64 || true
-          curl -fL "https://github.com/green-green-avk/build-proot-android/releases/download/v5.4.0-1_x86_64/proot" \
-            -o public/native/proot_x86_64 || true
-
-          # Fallback: use proot from termux bootstrap
-          if [ ! -s public/native/proot_arm64 ]; then
-            echo "Trying fallback proot download..."
-            curl -fL "https://github.com/termux/proot/releases/download/v5.1.107-40/proot-aarch64" \
-              -o public/native/proot_arm64 || true
-          fi
-
-          # ── Download Alpine Linux minimal rootfs (arm64) ──
-          echo "Downloading Alpine Linux arm64..."
-          curl -fL "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz" \
+          echo "=== Step 1: Download Alpine Linux arm64 minirootfs ==="
+          curl -fL --retry 5 --retry-delay 3 \
+            "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/aarch64/alpine-minirootfs-3.19.1-aarch64.tar.gz" \
             -o public/native/alpine.bin
 
-          echo "File sizes:"
+          if [ -s public/native/alpine.bin ]; then
+            echo "alpine.bin OK: $(du -sh public/native/alpine.bin | cut -f1)"
+          else
+            echo "ERROR: alpine.bin download failed!"
+            exit 1
+          fi
+
+          echo "=== Step 2: Download PRoot for arm64 from termux repo ==="
+          # Download .deb and extract proot binary
+          curl -fL --retry 5 --retry-delay 3 \
+            "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.77_aarch64.deb" \
+            -o /tmp/proot_aarch64.deb
+
+          if [ -s /tmp/proot_aarch64.deb ]; then
+            dpkg-deb -x /tmp/proot_aarch64.deb /tmp/proot_arm64_extracted
+            find /tmp/proot_arm64_extracted -name "proot" -type f | head -5
+            PROOT_BIN=$(find /tmp/proot_arm64_extracted -name "proot" -type f | head -1)
+            if [ -n "$PROOT_BIN" ]; then
+              cp "$PROOT_BIN" public/native/proot_arm64
+              echo "proot_arm64 OK from deb: $(du -sh public/native/proot_arm64 | cut -f1)"
+            fi
+          fi
+
+          echo "=== Step 3: Download PRoot for arm from termux repo ==="
+          curl -fL --retry 3 \
+            "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.77_arm.deb" \
+            -o /tmp/proot_arm.deb
+          if [ -s /tmp/proot_arm.deb ]; then
+            dpkg-deb -x /tmp/proot_arm.deb /tmp/proot_arm_extracted
+            PROOT_ARM=$(find /tmp/proot_arm_extracted -name "proot" -type f | head -1)
+            [ -n "$PROOT_ARM" ] && cp "$PROOT_ARM" public/native/proot_arm && echo "proot_arm OK"
+          fi
+
+          echo "=== Step 4: Download PRoot for x86_64 from termux repo ==="
+          curl -fL --retry 3 \
+            "https://packages.termux.dev/apt/termux-main/pool/main/p/proot/proot_5.1.107.77_x86_64.deb" \
+            -o /tmp/proot_x86.deb
+          if [ -s /tmp/proot_x86.deb ]; then
+            dpkg-deb -x /tmp/proot_x86.deb /tmp/proot_x86_extracted
+            PROOT_X86=$(find /tmp/proot_x86_extracted -name "proot" -type f | head -1)
+            [ -n "$PROOT_X86" ] && cp "$PROOT_X86" public/native/proot_x86_64 && echo "proot_x86_64 OK"
+          fi
+
+          echo "=== Final file sizes ==="
           ls -lh public/native/
 
-      - name: 📦 Install Dependencies
+          # Validate proot_arm64 exists
+          if [ ! -s public/native/proot_arm64 ]; then
+            echo "WARNING: proot_arm64 missing - terminal will use system shell fallback"
+          fi
+
+      - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: 🔨 Build Web App (Vite)
+      - name: Build Web App
         run: npm run build
 
-      - name: 📱 Sync Capacitor
+      - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: 🔧 Make Gradlew Executable
-        run: chmod +x android/gradlew
-
-      - name: 🏗️ Build Debug APK
+      - name: Build Debug APK
         run: |
+          chmod +x android/gradlew
           cd android
           ./gradlew assembleDebug --no-daemon
 
-      - name: 📦 APK Size Check
-        run: |
-          APK="android/app/build/outputs/apk/debug/app-debug.apk"
-          SIZE=$(du -sh "$APK" | cut -f1)
-          echo "APK Size: $SIZE"
-          echo "APK_SIZE=$SIZE" >> $GITHUB_ENV
-
-      - name: 📤 Upload Debug APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: CodePocket-v2-debug-${{ github.run_number }}
+          name: CodePocket-debug-${{ github.run_number }}
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      - name: 📋 Build Summary
+      - name: Summary
         if: always()
         run: |
-          echo "## ✅ Build Complete!" >> $GITHUB_STEP_SUMMARY
-          echo "**Run:** #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "**APK Size:** ${{ env.APK_SIZE }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Alpine Linux:** arm64 v3.19 bundled" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⬆️ Download APK from **Artifacts** section above" >> $GITHUB_STEP_SUMMARY
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          SIZE=$(du -sh "$APK" 2>/dev/null | cut -f1 || echo "N/A")
+          echo "## Build #${{ github.run_number }} - $([ -f "$APK" ] && echo 'SUCCESS' || echo 'FAILED')" >> $GITHUB_STEP_SUMMARY
+          echo "APK Size: $SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "Alpine: $(du -sh public/native/alpine.bin 2>/dev/null | cut -f1 || echo 'N/A')" >> $GITHUB_STEP_SUMMARY
+          echo "PRoot arm64: $(du -sh public/native/proot_arm64 2>/dev/null | cut -f1 || echo 'N/A')" >> $GITHUB_STEP_SUMMARY
