@@ -513,6 +513,10 @@ const UIManager={
     const ts=document.getElementById('setting-term-font'),tv=document.getElementById('term-font-val');
     if(ts&&tv){ts.value=s.termFontSize;tv.innerText=s.termFontSize;ts.addEventListener('input',e=>{const v=parseInt(e.target.value);tv.innerText=v;Object.values(TerminalManager.terminals).forEach(({term,fitAddon})=>{term.options.fontSize=v;fitAddon?.fit();});SettingsManager.set('termFontSize',v);});}
     document.getElementById('setting-export-btn')?.addEventListener('click',async()=>{const r=await StorageService.exportProject('codepocket-project');TerminalManager.print(r.message,'success');});
+    document.getElementById('full-settings-btn')?.addEventListener('click',()=>ExtSettings.show());
+    document.getElementById('setting-ws-export')?.addEventListener('click',()=>{const r=WorkspaceSync.export();TerminalManager.print(r.message,'success');});
+    document.getElementById('setting-deploy-btn')?.addEventListener('click',()=>CloudDeploy.showDialog());
+    document.getElementById('quick-theme-toggle')?.addEventListener('click',()=>{const dark=['catppuccin-mocha','dracula','nord','tokyo-night','ayu-dark','github-dark','monokai','solarized-dark'];const cur=ThemeService.current;ThemeService.apply(dark.includes(cur)?'github-light':'catppuccin-mocha',EditorManager.view);TerminalManager.print('🌙/☀️ Theme toggled!','success');});
   },
   _setupSearch(){
     const doSearch=()=>{
@@ -626,13 +630,468 @@ const UIManager={
   },
 };
 
+// ═══════════════════════════════════════════════
+// KEYBOARD SHORTCUTS MANAGER
+// ═══════════════════════════════════════════════
+const ShortcutManager = {
+  defaults: {
+    'save':          { keys: 'Ctrl+S',       action: ()=>FileManager.save() },
+    'palette':       { keys: 'Ctrl+K',       action: ()=>UIManager._openPalette() },
+    'palette2':      { keys: 'Ctrl+Shift+P', action: ()=>UIManager._openPalette() },
+    'toggle-sidebar':{ keys: 'Ctrl+B',       action: ()=>document.getElementById('left-sidebar')?.classList.toggle('hidden-mobile') },
+    'toggle-terminal':{ keys: 'Ctrl+`',      action: ()=>{ if(TerminalManager.panel?.classList.contains('hidden'))TerminalManager.show(); else TerminalManager.hide(); } },
+    'new-file':      { keys: 'Ctrl+N',       action: ()=>{ const n=prompt('Filename:'); if(n){ FileManager.files[n]=''; FileManager.openFile(n); FileManager.renderSidebar(); } } },
+    'close-file':    { keys: 'Ctrl+W',       action: ()=>{ if(FileManager.activeFile && confirm('Close '+FileManager.activeFile+'?')){ delete FileManager.files[FileManager.activeFile]; FileManager.renderSidebar(); } } },
+    'format':        { keys: 'Ctrl+Shift+F', action: ()=>EditorManager._runFormat() },
+    'find':          { keys: 'Ctrl+F',       action: ()=>{ document.querySelector('[data-panel="search"]')?.click(); document.getElementById('search-query')?.focus(); } },
+    'zoom-in':       { keys: 'Ctrl+=',       action: ()=>{ const s=SettingsManager.load(); const v=Math.min(s.editorFontSize+1,32); SettingsManager.set('editorFontSize',v); document.querySelectorAll('.cm-editor').forEach(el=>el.style.fontSize=v+'px'); } },
+    'zoom-out':      { keys: 'Ctrl+-',       action: ()=>{ const s=SettingsManager.load(); const v=Math.max(s.editorFontSize-1,8); SettingsManager.set('editorFontSize',v); document.querySelectorAll('.cm-editor').forEach(el=>el.style.fontSize=v+'px'); } },
+    'theme-toggle':  { keys: 'Ctrl+Shift+T', action: ()=>{ const dark=['catppuccin-mocha','dracula','nord','tokyo-night','ayu-dark','github-dark']; const cur=ThemeService.current; ThemeService.apply(dark.includes(cur)?'github-light':'catppuccin-mocha',EditorManager.view); } },
+    'run':           { keys: 'Ctrl+Enter',   action: ()=>document.getElementById('run-btn')?.click() },
+    'lint':          { keys: 'Ctrl+Shift+L', action: ()=>EditorManager._runLint() },
+    'ai-panel':      { keys: 'Ctrl+Shift+A', action: ()=>document.querySelector('[data-panel="ai"]')?.click() },
+  },
+  custom: {},
+
+  load() {
+    try { this.custom = JSON.parse(localStorage.getItem('cp_shortcuts')||'{}'); } catch(e){}
+  },
+
+  save() {
+    localStorage.setItem('cp_shortcuts', JSON.stringify(this.custom));
+  },
+
+  getAll() {
+    const all = {...this.defaults};
+    Object.entries(this.custom).forEach(([id,keys])=>{
+      if(all[id]) all[id] = {...all[id], keys};
+    });
+    return all;
+  },
+
+  matches(e, keysStr) {
+    const parts = keysStr.split('+');
+    const ctrl  = parts.includes('Ctrl');
+    const shift = parts.includes('Shift');
+    const alt   = parts.includes('Alt');
+    const key   = parts.filter(p=>!['Ctrl','Shift','Alt'].includes(p))[0]||'';
+    return e.ctrlKey===ctrl && e.shiftKey===shift && e.altKey===alt && e.key.toLowerCase()===key.toLowerCase();
+  },
+
+  attach() {
+    this.load();
+    document.addEventListener('keydown', e=>{
+      const all = this.getAll();
+      for(const [,shortcut] of Object.entries(all)) {
+        if(this.matches(e, shortcut.keys) && shortcut.action) {
+          e.preventDefault();
+          shortcut.action();
+          return;
+        }
+      }
+    });
+  }
+};
+
+// ═══════════════════════════════════════════════
+// WORKSPACE SYNC MANAGER
+// ═══════════════════════════════════════════════
+const WorkspaceSync = {
+  STORAGE_KEY: 'cp_workspace',
+
+  save() {
+    const ws = {
+      files: FileManager.files,
+      activeFile: FileManager.activeFile,
+      theme: ThemeService.current,
+      settings: SettingsManager.load(),
+      profile: JSON.parse(localStorage.getItem('cp_profile')||'{}'),
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(ws));
+    return ws;
+  },
+
+  load() {
+    try {
+      const ws = JSON.parse(localStorage.getItem(this.STORAGE_KEY)||'null');
+      if (!ws) return null;
+      return ws;
+    } catch(e) { return null; }
+  },
+
+  export() {
+    const ws = this.save();
+    const blob = new Blob([JSON.stringify(ws,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'codepocket-workspace-' + Date.now() + '.json';
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(a.href);
+    return {ok:true, message:'✅ Workspace exported!'};
+  },
+
+  async import(file) {
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const ws = JSON.parse(e.target.result);
+          if (ws.files) Object.assign(FileManager.files, ws.files);
+          if (ws.settings) localStorage.setItem('cp_settings', JSON.stringify(ws.settings));
+          if (ws.profile) localStorage.setItem('cp_profile', JSON.stringify(ws.profile));
+          if (ws.theme) ThemeService.apply(ws.theme, EditorManager.view);
+          FileManager.renderSidebar();
+          if (ws.activeFile && FileManager.files[ws.activeFile]) FileManager.openFile(ws.activeFile);
+          resolve({ok:true, message:'✅ Workspace imported!'});
+        } catch(err) {
+          resolve({ok:false, error:'Invalid workspace file'});
+        }
+      };
+      reader.readAsText(file);
+    });
+  },
+
+  autoSave() {
+    setInterval(()=>this.save(), 30000); // every 30s
+  }
+};
+
+// ═══════════════════════════════════════════════
+// CLOUD DEPLOY MANAGER
+// ═══════════════════════════════════════════════
+const CloudDeploy = {
+  async deployToGithubPages(token, owner, repo) {
+    TerminalManager.print('🚀 Deploying to GitHub Pages...', 'system');
+    try {
+      // Get current files and create index.html if needed
+      const files = FileManager.files;
+      const hasHtml = Object.keys(files).some(f=>f.endsWith('.html'));
+      if (!hasHtml) return { ok:false, error:'No HTML file found. Create index.html first.' };
+
+      // Push each file to gh-pages branch via GitHub API
+      const api = async (method, path, body) => {
+        const r = await fetch('https://api.github.com'+path, {
+          method, headers: {'Authorization':'Bearer '+token,'Content-Type':'application/json','User-Agent':'CodePocket'},
+          body: body ? JSON.stringify(body) : undefined
+        });
+        return r.json();
+      };
+
+      // Get or create gh-pages branch
+      let branchSha = '';
+      try {
+        const br = await api('GET', '/repos/'+owner+'/'+repo+'/git/ref/heads/main');
+        branchSha = br.object?.sha || '';
+      } catch(e){}
+
+      // Push files
+      for(const [filename, content] of Object.entries(files)) {
+        const info = await api('GET', '/repos/'+owner+'/'+repo+'/contents/'+filename).catch(()=>({}));
+        const body = {message:'Deploy: '+filename, content:btoa(unescape(encodeURIComponent(content))), branch:'main'};
+        if(info.sha) body.sha = info.sha;
+        await api('PUT', '/repos/'+owner+'/'+repo+'/contents/'+filename, body);
+      }
+
+      // Enable GitHub Pages
+      await api('POST', '/repos/'+owner+'/'+repo+'/pages', {source:{branch:'main',path:'/'}});
+
+      const url = 'https://'+owner+'.github.io/'+repo+'/';
+      TerminalManager.print('✅ Deployed! URL: '+url, 'success');
+      return { ok:true, url };
+    } catch(e) {
+      return { ok:false, error: e.message };
+    }
+  },
+
+  async deployToNetlify(token, siteId) {
+    TerminalManager.print('🚀 Deploying to Netlify...', 'system');
+    try {
+      const files = {};
+      const allFiles = FileManager.files;
+      for(const [name,content] of Object.entries(allFiles)) {
+        files['/'+name] = { content };
+      }
+      const r = await fetch('https://api.netlify.com/api/v1/sites'+(siteId?'/'+siteId:'')+'/deploys', {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body: JSON.stringify({files})
+      });
+      const data = await r.json();
+      if(data.deploy_url) {
+        TerminalManager.print('✅ Netlify: '+data.deploy_url, 'success');
+        return {ok:true, url:data.deploy_url};
+      }
+      return {ok:false, error: data.message||'Deploy failed'};
+    } catch(e) {
+      return {ok:false, error:e.message};
+    }
+  },
+
+  showDialog() {
+    const existingModal = document.getElementById('deploy-modal');
+    if (existingModal) existingModal.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'deploy-modal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+      <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;padding:24px;width:90%;max-width:400px;color:var(--text-primary);">
+        <h3 style="margin:0 0 16px;color:var(--accent)">🚀 Deploy Project</h3>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+          <select id="deploy-target" style="background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:8px;">
+            <option value="github">GitHub Pages (free)</option>
+            <option value="netlify">Netlify (free)</option>
+          </select>
+          <input id="deploy-token" type="password" placeholder="API Token / PAT" style="background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:8px;">
+          <input id="deploy-owner" placeholder="GitHub username (for GH Pages)" style="background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:8px;">
+          <input id="deploy-repo" placeholder="Repository name" style="background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:8px;">
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button id="deploy-submit-btn" style="flex:1;background:var(--accent);color:var(--bg-base);border:none;padding:10px;border-radius:6px;cursor:pointer;font-weight:600;">🚀 Deploy</button>
+            <button onclick="document.getElementById('deploy-modal').remove()" style="flex:1;background:var(--bg-hover);color:var(--text-primary);border:none;padding:10px;border-radius:6px;cursor:pointer;">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    document.getElementById('deploy-submit-btn')?.addEventListener('click', async()=>{
+      const target = document.getElementById('deploy-target')?.value;
+      const token  = document.getElementById('deploy-token')?.value?.trim();
+      const owner  = document.getElementById('deploy-owner')?.value?.trim();
+      const repo   = document.getElementById('deploy-repo')?.value?.trim();
+      modal.remove();
+      let r;
+      if (target === 'github') r = await CloudDeploy.deployToGithubPages(token, owner, repo);
+      else r = await CloudDeploy.deployToNetlify(token);
+      TerminalManager.print(r.ok ? '✅ '+r.url : '❌ '+r.error, r.ok?'success':'error');
+    });
+  }
+};
+
+// ═══════════════════════════════════════════════
+// EXTENDED SETTINGS MANAGER UI
+// ═══════════════════════════════════════════════
+const ExtSettings = {
+  show() {
+    const existingModal = document.getElementById('ext-settings-modal');
+    if (existingModal) existingModal.remove();
+
+    const s = SettingsManager.load();
+    const shortcuts = ShortcutManager.getAll();
+
+    const modal = document.createElement('div');
+    modal.id = 'ext-settings-modal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:9999;display:flex;align-items:center;justify-content:center;overflow-y:auto;';
+
+    modal.innerHTML = `
+      <div style="background:var(--bg-panel);border:1px solid var(--border);border-radius:12px;padding:24px;width:95%;max-width:520px;max-height:90vh;overflow-y:auto;color:var(--text-primary);position:relative;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 style="margin:0;color:var(--accent)">⚙️ Settings</h2>
+          <button onclick="document.getElementById('ext-settings-modal').remove()" style="background:none;border:none;color:var(--text-primary);font-size:20px;cursor:pointer;">✕</button>
+        </div>
+
+        <!-- EDITOR -->
+        <div class="settings-section">
+          <h4 style="color:var(--accent);margin:0 0 12px;border-bottom:1px solid var(--border);padding-bottom:6px;">📝 Editor</h4>
+          <div class="settings-row">
+            <label>Font Size <span id="ext-font-size-val">${s.editorFontSize||14}</span>px</label>
+            <input type="range" id="ext-font-size" min="8" max="32" value="${s.editorFontSize||14}" style="width:120px;">
+          </div>
+          <div class="settings-row">
+            <label>Font Family</label>
+            <select id="ext-font-family" style="background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 8px;">
+              <option value="'Fira Code', monospace" ${(s.fontFamily||'').includes('Fira')?' selected':''}>Fira Code</option>
+              <option value="'JetBrains Mono', monospace" ${(s.fontFamily||'').includes('JetBrains')?' selected':''}>JetBrains Mono</option>
+              <option value="'Cascadia Code', monospace" ${(s.fontFamily||'').includes('Cascadia')?' selected':''}>Cascadia Code</option>
+              <option value="Consolas, monospace" ${(s.fontFamily||'').includes('Consolas')?' selected':''}>Consolas</option>
+              <option value="'Courier New', monospace" ${(s.fontFamily||'').includes('Courier')?' selected':''}>Courier New</option>
+              <option value="monospace" ${s.fontFamily==='monospace'?' selected':''}>System Monospace</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label>Tab Size</label>
+            <select id="ext-tab-size" style="background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 8px;">
+              <option value="2" ${s.tabSize===2?' selected':''}>2 spaces</option>
+              <option value="4" ${(s.tabSize===4||!s.tabSize)?' selected':''}>4 spaces</option>
+              <option value="8" ${s.tabSize===8?' selected':''}>8 spaces</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label>Word Wrap</label>
+            <input type="checkbox" id="ext-word-wrap" ${s.wordWrap?' checked':''}>
+          </div>
+          <div class="settings-row">
+            <label>Line Numbers</label>
+            <input type="checkbox" id="ext-line-nums" ${s.lineNumbers!==false?' checked':''}>
+          </div>
+          <div class="settings-row">
+            <label>Auto Save</label>
+            <input type="checkbox" id="ext-auto-save" ${s.autoSave!==false?' checked':''}>
+          </div>
+          <div class="settings-row">
+            <label>Bracket Pairs</label>
+            <input type="checkbox" id="ext-brackets" ${s.brackets!==false?' checked':''}>
+          </div>
+          <div class="settings-row">
+            <label>Minimap</label>
+            <input type="checkbox" id="ext-minimap" ${s.minimap?' checked':''}>
+          </div>
+        </div>
+
+        <!-- TERMINAL -->
+        <div class="settings-section" style="margin-top:16px;">
+          <h4 style="color:var(--accent);margin:0 0 12px;border-bottom:1px solid var(--border);padding-bottom:6px;">💻 Terminal</h4>
+          <div class="settings-row">
+            <label>Font Size <span id="ext-term-size-val">${s.termFontSize||14}</span>px</label>
+            <input type="range" id="ext-term-size" min="8" max="24" value="${s.termFontSize||14}" style="width:120px;">
+          </div>
+          <div class="settings-row">
+            <label>Scrollback Lines</label>
+            <input type="number" id="ext-scrollback" value="${s.scrollback||5000}" min="100" max="50000" style="background:var(--bg-base);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 8px;width:80px;">
+          </div>
+          <div class="settings-row">
+            <label>Cursor Blink</label>
+            <input type="checkbox" id="ext-cursor-blink" ${s.cursorBlink!==false?' checked':''}>
+          </div>
+        </div>
+
+        <!-- APPEARANCE -->
+        <div class="settings-section" style="margin-top:16px;">
+          <h4 style="color:var(--accent);margin:0 0 12px;border-bottom:1px solid var(--border);padding-bottom:6px;">🎨 Appearance</h4>
+          <div class="settings-row">
+            <label>Quick Theme Toggle</label>
+            <button onclick="ThemeService.apply(ThemeService.current==='github-light'?'catppuccin-mocha':'github-light', EditorManager.view); TerminalManager.print('Theme toggled','success');" style="background:var(--bg-hover);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:4px 10px;cursor:pointer;">🌙/☀️ Toggle</button>
+          </div>
+          <div class="settings-row">
+            <label>Compact Sidebar</label>
+            <input type="checkbox" id="ext-compact" ${s.compact?' checked':''}>
+          </div>
+        </div>
+
+        <!-- KEYBOARD SHORTCUTS -->
+        <div class="settings-section" style="margin-top:16px;">
+          <h4 style="color:var(--accent);margin:0 0 12px;border-bottom:1px solid var(--border);padding-bottom:6px;">⌨️ Keyboard Shortcuts</h4>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:12px;">
+            ${Object.entries(shortcuts).filter(([id])=>!id.includes('2')).map(([id,s])=>`
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px;background:var(--bg-base);border-radius:4px;">
+                <span style="color:var(--text-secondary)">${id.replace(/-/g,' ')}</span>
+                <code style="background:var(--bg-editor);padding:2px 6px;border-radius:4px;color:var(--accent)">${s.keys}</code>
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <!-- WORKSPACE -->
+        <div class="settings-section" style="margin-top:16px;">
+          <h4 style="color:var(--accent);margin:0 0 12px;border-bottom:1px solid var(--border);padding-bottom:6px;">💼 Workspace</h4>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="ext-ws-export" style="flex:1;background:var(--bg-hover);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;font-size:12px;">📤 Export Workspace</button>
+            <button id="ext-ws-import-btn" style="flex:1;background:var(--bg-hover);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;font-size:12px;">📥 Import Workspace</button>
+            <input type="file" id="ext-ws-import" accept=".json" style="display:none;">
+            <button id="ext-deploy-btn" style="flex:1;background:var(--accent);color:var(--bg-base);border:none;border-radius:6px;padding:8px;cursor:pointer;font-size:12px;font-weight:600;">🚀 Deploy</button>
+          </div>
+        </div>
+
+        <button id="ext-settings-save" style="width:100%;margin-top:20px;background:var(--accent);color:var(--bg-base);border:none;padding:12px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;">💾 Save All Settings</button>
+      </div>`;
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e=>{ if(e.target===modal) modal.remove(); });
+
+    // Font size live preview
+    document.getElementById('ext-font-size')?.addEventListener('input', e=>{
+      const v=parseInt(e.target.value);
+      document.getElementById('ext-font-size-val').textContent=v;
+      document.querySelectorAll('.cm-editor').forEach(el=>el.style.fontSize=v+'px');
+    });
+
+    // Term size live preview
+    document.getElementById('ext-term-size')?.addEventListener('input', e=>{
+      const v=parseInt(e.target.value);
+      document.getElementById('ext-term-size-val').textContent=v;
+      Object.values(TerminalManager.terminals).forEach(({term,fitAddon})=>{
+        term.options.fontSize=v; fitAddon?.fit();
+      });
+    });
+
+    // Font family live preview
+    document.getElementById('ext-font-family')?.addEventListener('change', e=>{
+      document.querySelectorAll('.cm-editor').forEach(el=>el.style.fontFamily=e.target.value);
+    });
+
+    // Workspace export
+    document.getElementById('ext-ws-export')?.addEventListener('click',()=>{
+      const r=WorkspaceSync.export(); TerminalManager.print(r.message,'success'); modal.remove();
+    });
+
+    // Workspace import
+    document.getElementById('ext-ws-import-btn')?.addEventListener('click',()=>{
+      document.getElementById('ext-ws-import')?.click();
+    });
+    document.getElementById('ext-ws-import')?.addEventListener('change', async e=>{
+      if(!e.target.files[0]) return;
+      const r=await WorkspaceSync.import(e.target.files[0]);
+      TerminalManager.print(r.ok?r.message:'❌ '+r.error, r.ok?'success':'error');
+      modal.remove();
+    });
+
+    // Deploy
+    document.getElementById('ext-deploy-btn')?.addEventListener('click',()=>{ modal.remove(); CloudDeploy.showDialog(); });
+
+    // Save settings
+    document.getElementById('ext-settings-save')?.addEventListener('click',()=>{
+      const newSettings = {
+        editorFontSize: parseInt(document.getElementById('ext-font-size')?.value||14),
+        termFontSize:   parseInt(document.getElementById('ext-term-size')?.value||14),
+        fontFamily:     document.getElementById('ext-font-family')?.value || "'Fira Code', monospace",
+        tabSize:        parseInt(document.getElementById('ext-tab-size')?.value||4),
+        wordWrap:       document.getElementById('ext-word-wrap')?.checked,
+        lineNumbers:    document.getElementById('ext-line-nums')?.checked,
+        autoSave:       document.getElementById('ext-auto-save')?.checked,
+        brackets:       document.getElementById('ext-brackets')?.checked,
+        minimap:        document.getElementById('ext-minimap')?.checked,
+        scrollback:     parseInt(document.getElementById('ext-scrollback')?.value||5000),
+        cursorBlink:    document.getElementById('ext-cursor-blink')?.checked,
+        compact:        document.getElementById('ext-compact')?.checked,
+      };
+      const cur = SettingsManager.load();
+      SettingsManager.save({...cur,...newSettings});
+
+      // Apply immediately
+      document.querySelectorAll('.cm-editor').forEach(el=>{
+        el.style.fontSize = newSettings.editorFontSize + 'px';
+        el.style.fontFamily = newSettings.fontFamily;
+      });
+      if(newSettings.compact) document.getElementById('activity-bar')?.classList.add('compact');
+      else document.getElementById('activity-bar')?.classList.remove('compact');
+
+      TerminalManager.print('✅ Settings saved!','success');
+      modal.remove();
+    });
+  }
+};
+
 // ═══ BOOTSTRAP ═══
 (async()=>{
   await FileManager.init();
   EditorManager.init();
   await TerminalManager.init();
   UIManager.init();
+  ShortcutManager.attach();
+  WorkspaceSync.autoSave();
   if(FileManager.activeFile)EditorManager.setContent(FileManager.files[FileManager.activeFile],FileManager.activeFile);
-  TerminalManager.print('✅ CodePocket v2.0 ready!','success');
-  TerminalManager.print('\u{1F680} AI | Git | FTP | 10 Themes | Markdown | Debug - all active!','system');
+
+  // Apply saved settings on boot
+  const s = SettingsManager.load();
+  if(s.editorFontSize) document.querySelectorAll('.cm-editor').forEach(el=>el.style.fontSize=s.editorFontSize+'px');
+  if(s.fontFamily)     document.querySelectorAll('.cm-editor').forEach(el=>el.style.fontFamily=s.fontFamily);
+  if(s.theme)          ThemeService.apply(s.theme, EditorManager.view);
+
+  // Wire full settings button
+  document.getElementById('full-settings-btn')?.addEventListener('click',()=>ExtSettings.show());
+
+  // Wire deploy button in command palette
+  document.querySelectorAll('[data-cmd="deploy"]').forEach(el=>el.addEventListener('click',()=>{ document.getElementById('palette-modal')?.classList.add('hidden'); CloudDeploy.showDialog(); }));
+
+  TerminalManager.print('✅ CodePocket v2.0 ready! Type help in terminal','success');
+  TerminalManager.print('⌨️  Ctrl+K = palette | Ctrl+S = save | Ctrl+` = terminal','system');
 })();
