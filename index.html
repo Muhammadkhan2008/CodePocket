@@ -6,6 +6,12 @@
     <title>CodePocket</title>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/style.css">
+  <style>
+    .settings-section { padding: 4px 0; }
+    .settings-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); font-size:13px; color:var(--text-primary); }
+    .settings-row label { color:var(--text-secondary); }
+    .settings-row input[type=checkbox] { width:16px; height:16px; cursor:pointer; accent-color:var(--accent); }
+  </style>
   </head>
   <body>
     <!-- Floating Command Palette -->
@@ -315,16 +321,53 @@
           <!-- SETTINGS PANEL -->
           <div id="panel-settings" class="side-panel hidden">
             <div class="panel-header"><span>SETTINGS</span></div>
-            <div class="panel-content" style="gap:15px;">
+            <div class="panel-content" style="gap:10px;">
+
+              <!-- Quick Settings -->
               <div style="background:var(--bg-panel);padding:10px;border-radius:8px;border:1px solid var(--border);">
                 <label style="display:block;margin-bottom:5px;font-size:12px;color:var(--text-primary);">Editor Font Size (<span id="font-size-val">14</span>px)</label>
-                <input type="range" id="setting-font-size" min="10" max="24" value="14" style="width:100%">
+                <input type="range" id="setting-font-size" min="8" max="32" value="14" style="width:100%">
               </div>
               <div style="background:var(--bg-panel);padding:10px;border-radius:8px;border:1px solid var(--border);">
-                <label style="display:block;margin-bottom:5px;font-size:12px;color:var(--text-primary);">Terminal Font Size (<span id="term-font-val">12</span>px)</label>
-                <input type="range" id="setting-term-font" min="10" max="20" value="12" style="width:100%">
+                <label style="display:block;margin-bottom:5px;font-size:12px;color:var(--text-primary);">Terminal Font Size (<span id="term-font-val">14</span>px)</label>
+                <input type="range" id="setting-term-font" min="8" max="24" value="14" style="width:100%">
               </div>
-              <button id="setting-export-btn" class="secondary-btn" style="width:100%;padding:10px;">📦 Export All Files</button>
+
+              <!-- Theme toggle -->
+              <div style="background:var(--bg-panel);padding:10px;border-radius:8px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:12px;color:var(--text-primary);">🌙 Dark / ☀️ Light</span>
+                <button id="quick-theme-toggle" style="background:var(--accent);color:var(--bg-base);border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-weight:600;">Toggle Theme</button>
+              </div>
+
+              <!-- Full Settings -->
+              <button id="full-settings-btn" style="width:100%;padding:12px;background:var(--accent);color:var(--bg-base);border:none;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;">⚙️ Full Settings (VS Code style)</button>
+
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button id="setting-export-btn" style="flex:1;padding:10px;background:var(--bg-hover);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;">📦 Export Files</button>
+                <button id="setting-ws-export" style="flex:1;padding:10px;background:var(--bg-hover);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;">💼 Export Workspace</button>
+              </div>
+
+              <button id="setting-deploy-btn" style="width:100%;padding:10px;background:var(--bg-hover);color:var(--text-primary);border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:12px;">🚀 Deploy to GitHub Pages / Netlify</button>
+
+              <!-- Keyboard shortcuts quick view -->
+              <div style="background:var(--bg-panel);padding:10px;border-radius:8px;border:1px solid var(--border);">
+                <div style="font-size:11px;color:var(--text-secondary);margin-bottom:8px;font-weight:600;">⌨️ KEYBOARD SHORTCUTS</div>
+                <div style="font-size:11px;color:var(--text-muted);display:flex;flex-direction:column;gap:4px;">
+                  <div style="display:flex;justify-content:space-between;"><span>Save</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+S</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Command Palette</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+K</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Toggle Terminal</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+`</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Toggle Sidebar</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+B</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Run File</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+Enter</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Format Code</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+Shift+F</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Find</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+F</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Zoom In/Out</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl +/-</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>New File</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+N</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Lint Code</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+Shift+L</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>AI Panel</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+Shift+A</code></div>
+                  <div style="display:flex;justify-content:space-between;"><span>Theme Toggle</span><code style="background:var(--bg-editor);padding:1px 6px;border-radius:3px;color:var(--accent)">Ctrl+Shift+T</code></div>
+                </div>
+              </div>
+
             </div>
           </div>
           
