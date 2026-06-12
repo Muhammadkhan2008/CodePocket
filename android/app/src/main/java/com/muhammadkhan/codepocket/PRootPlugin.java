@@ -1,236 +1,166 @@
 package com.muhammadkhan.codepocket;
-
-import android.content.res.AssetManager;
+import android.os.Build;
 import android.util.Log;
-
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.HashMap;
-import java.util.Map;
+import java.io.*;
+import java.util.*;
 
 @CapacitorPlugin(name = "PRootPlugin")
 public class PRootPlugin extends Plugin {
-
     private static final String TAG = "PRootPlugin";
-    private static final String DEFAULT_SESSION = "default";
+    private static final String DEF = "default";
+    private final Map<String,Process> sessions = new HashMap<>();
+    private boolean ready = false;
 
-    // Map: sessionId -> running Process
-    private final Map<String, Process> sessions = new HashMap<>();
+    private String getAbi() {
+        String[] a = Build.SUPPORTED_ABIS;
+        if (a != null && a.length > 0) {
+            if (a[0].contains("arm64") || a[0].contains("aarch64")) return "proot_arm64";
+            if (a[0].contains("x86_64")) return "proot_x86_64";
+            if (a[0].contains("armeabi")) return "proot_arm";
+        }
+        return "proot_arm64";
+    }
 
-    // ---------------------------------------------------------------
-    // initEnvironment — extracts alpine.bin from assets/ to filesDir
-    // ---------------------------------------------------------------
+    private void cp(InputStream i, OutputStream o) throws IOException {
+        byte[] b = new byte[65536]; int n;
+        while ((n = i.read(b)) != -1) o.write(b, 0, n);
+    }
+
+    private void emit(String sid, String data) {
+        JSObject o = new JSObject();
+        o.put("sessionId", sid); o.put("data", data);
+        notifyListeners("terminal_output", o);
+    }
+
     @PluginMethod
     public void initEnvironment(PluginCall call) {
         new Thread(() -> {
             try {
-                File alpineDir = new File(getContext().getFilesDir(), "alpine");
-                File doneMarker = new File(alpineDir, ".extracted");
-
-                if (!doneMarker.exists()) {
-                    alpineDir.mkdirs();
-                    AssetManager assets = getContext().getAssets();
-
-                    // Extract alpine tarball
-                    try (InputStream in = assets.open("public/native/alpine.bin");
-                         FileOutputStream out = new FileOutputStream(new File(alpineDir, "alpine.bin"))) {
-                        copyStream(in, out);
+                File fd = getContext().getFilesDir();
+                File ad = new File(fd, "alpine");
+                File done = new File(ad, ".done");
+                if (!done.exists()) {
+                    ad.mkdirs();
+                    emit(DEF, "\u001B[36m[+] Extracting Alpine Linux...\u001B[0m\r\n");
+                    File tb = new File(fd, "alpine.tar.gz");
+                    try (InputStream in = getContext().getAssets().open("public/native/alpine.bin");
+                         FileOutputStream out = new FileOutputStream(tb)) { cp(in, out); }
+                    Process tar = new ProcessBuilder("tar","-xzf",tb.getAbsolutePath(),"-C",ad.getAbsolutePath())
+                        .redirectErrorStream(true).start();
+                    int exit = tar.waitFor();
+                    tb.delete();
+                    if (exit != 0) {
+                        emit(DEF, "\u001B[31m[!] Alpine extract failed\u001B[0m\r\n");
+                        call.resolve(); return;
                     }
-
-                    // Extract the tarball using tar
-                    Process tar = Runtime.getRuntime().exec(new String[]{
-                        "tar", "-xf", new File(alpineDir, "alpine.bin").getAbsolutePath(),
-                        "-C", alpineDir.getAbsolutePath()
-                    });
-                    tar.waitFor();
-                    doneMarker.createNewFile();
-                    Log.i(TAG, "Alpine extracted to " + alpineDir.getAbsolutePath());
-                } else {
-                    Log.i(TAG, "Alpine already extracted");
-                }
-
-                // Extract and chmod PRoot binary from assets
-                File prootFile = new File(getContext().getFilesDir(), "proot");
-                if (!prootFile.exists() || prootFile.length() == 0) {
-                    try (InputStream in = getContext().getAssets().open("public/native/proot");
-                         FileOutputStream out = new FileOutputStream(prootFile)) {
-                        copyStream(in, out);
+                    for (String d : new String[]{"proc","sys","dev","dev/pts","tmp","root","root/workspace","etc","usr/bin","usr/sbin","bin","sbin"})
+                        new File(ad, d).mkdirs();
+                    try (PrintWriter pw = new PrintWriter(new File(ad,"etc/resolv.conf")))
+                        { pw.println("nameserver 8.8.8.8"); pw.println("nameserver 1.1.1.1"); }
+                    try (PrintWriter pw = new PrintWriter(new File(ad,"etc/passwd")))
+                        { pw.println("root:x:0:0:root:/root:/bin/sh"); }
+                    try (PrintWriter pw = new PrintWriter(new File(ad,"root/.profile"))) {
+                        pw.println("export HOME=/root TERM=xterm-256color");
+                        pw.println("export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+                        pw.println("alias ll='ls -la' cls='clear'");
                     }
-                    Runtime.getRuntime().exec(new String[]{"chmod", "+x", prootFile.getAbsolutePath()}).waitFor();
-                    Log.i(TAG, "PRoot extracted to " + prootFile.getAbsolutePath());
+                    done.createNewFile();
+                    emit(DEF, "\u001B[32m[+] Alpine Linux ready!\u001B[0m\r\n");
                 }
-
+                File proot = new File(fd, "proot");
+                if (!proot.exists() || proot.length() < 1000) {
+                    String abiName = getAbi();
+                    emit(DEF, "\u001B[36m[+] Extracting PRoot (" + abiName + ")...\u001B[0m\r\n");
+                    try (InputStream in = getContext().getAssets().open("public/native/" + abiName);
+                         FileOutputStream out = new FileOutputStream(proot)) { cp(in, out); }
+                    new ProcessBuilder("chmod","+x",proot.getAbsolutePath()).start().waitFor();
+                    emit(DEF, "\u001B[32m[+] PRoot ready!\u001B[0m\r\n");
+                }
+                ready = true;
                 call.resolve();
             } catch (Exception e) {
-                Log.e(TAG, "initEnvironment failed", e);
-                call.reject("Failed to init environment: " + e.getMessage());
+                Log.e(TAG, "init: " + e.getMessage(), e);
+                ready = false;
+                call.resolve();
             }
         }).start();
     }
 
-    // ---------------------------------------------------------------
-    // startSession — spawns a PRoot shell for a named session
-    // ---------------------------------------------------------------
     @PluginMethod
     public void startSession(PluginCall call) {
-        String sessionId = call.getString("sessionId", DEFAULT_SESSION);
-
-        // Stop existing session with same ID if any
-        if (sessions.containsKey(sessionId)) {
-            stopSessionInternal(sessionId);
-        }
-
+        String sid = call.getString("sessionId", DEF);
+        kill(sid);
         new Thread(() -> {
             try {
-                File filesDir = getContext().getFilesDir();
-                File alpineDir = new File(filesDir, "alpine");
-                File prootFile = new File(filesDir, "proot");
-
-                String[] cmd;
-                if (prootFile.exists()) {
-                    cmd = new String[]{
-                        prootFile.getAbsolutePath(),
-                        "--rootfs=" + alpineDir.getAbsolutePath(),
-                        "--bind=/dev",
-                        "--bind=/proc",
-                        "--bind=/sys",
-                        "/bin/sh", "-i"
-                    };
+                File fd = getContext().getFilesDir();
+                File ad = new File(fd, "alpine");
+                File proot = new File(fd, "proot");
+                File binSh = new File(ad, "bin/sh");
+                ProcessBuilder pb;
+                if (ready && proot.exists() && proot.length() > 1000 && binSh.exists()) {
+                    pb = new ProcessBuilder(proot.getAbsolutePath(),
+                        "--rootfs=" + ad.getAbsolutePath(),
+                        "--bind=/dev","--bind=/proc","--bind=/sys",
+                        "--cwd=/root","--kill-on-exit","/bin/sh","--login");
+                    emit(sid, "\u001B[32m\r\n  Alpine Linux Terminal - CodePocket\r\n  python3 | gcc | node | git\r\n\u001B[0m\r\n");
                 } else {
-                    // Fallback: bare shell
-                    cmd = new String[]{"/bin/sh", "-i"};
-                    notifyListeners("terminal_output", buildOutput(sessionId, "\u001B[33m[WARN] PRoot not found, using system shell\u001B[0m\r\n"));
+                    pb = new ProcessBuilder("/system/bin/sh");
+                    String why = !proot.exists() ? "proot missing" : proot.length()<1000 ? "proot corrupt" : "bin/sh missing";
+                    emit(sid, "\u001B[33m\r\n  System Shell (" + why + ")\r\n  ls,cd,cat,echo,pwd work\r\n\u001B[0m\r\n");
                 }
-
-                ProcessBuilder pb = new ProcessBuilder(cmd);
-                pb.environment().put("TERM", "xterm-256color");
-                pb.environment().put("HOME", "/root");
-                pb.environment().put("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+                Map<String,String> env = pb.environment();
+                env.put("TERM","xterm-256color"); env.put("HOME","/root");
+                env.put("USER","root"); env.put("SHELL","/bin/sh");
+                env.put("LC_ALL","C");
+                env.put("PATH","/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
                 pb.redirectErrorStream(true);
-                Process process = pb.start();
-                sessions.put(sessionId, process);
-
-                // Read output loop
-                final String sid = sessionId;
+                Process proc = pb.start();
+                sessions.put(sid, proc);
+                proc.getOutputStream().write("\n".getBytes("UTF-8"));
+                proc.getOutputStream().flush();
+                final String s = sid;
                 new Thread(() -> {
-                    byte[] buf = new byte[1024];
-                    int n;
-                    try {
-                        while ((n = process.getInputStream().read(buf)) != -1) {
-                            String chunk = new String(buf, 0, n);
-                            notifyListeners("terminal_output", buildOutput(sid, chunk));
-                        }
-                    } catch (IOException e) {
-                        // Process ended
-                    }
-                    sessions.remove(sid);
-                    notifyListeners("terminal_output", buildOutput(sid, "\r\n[session ended]\r\n"));
+                    byte[] buf = new byte[4096]; int n;
+                    try { while ((n=proc.getInputStream().read(buf))!=-1) emit(s,new String(buf,0,n,"UTF-8")); }
+                    catch (IOException ignored) {}
+                    sessions.remove(s);
+                    emit(s,"\r\n\u001B[33m[session ended]\u001B[0m\r\n");
                 }).start();
-
                 call.resolve();
-            } catch (Exception e) {
-                Log.e(TAG, "startSession failed", e);
-                call.reject("Failed to start session: " + e.getMessage());
-            }
+            } catch (Exception e) { call.reject(e.getMessage()); }
         }).start();
     }
 
-    // ---------------------------------------------------------------
-    // writeData — send input to a session's stdin
-    // ---------------------------------------------------------------
     @PluginMethod
     public void writeData(PluginCall call) {
-        String sessionId = call.getString("sessionId", DEFAULT_SESSION);
+        String sid = call.getString("sessionId", DEF);
         String data = call.getString("data", "");
-
-        Process process = sessions.get(sessionId);
-        if (process == null) {
-            call.reject("No session: " + sessionId);
-            return;
-        }
-
+        Process p = sessions.get(sid);
+        if (p == null) { call.reject("no session"); return; }
         new Thread(() -> {
-            try {
-                process.getOutputStream().write(data.getBytes());
-                process.getOutputStream().flush();
-                call.resolve();
-            } catch (IOException e) {
-                call.reject("writeData failed: " + e.getMessage());
-            }
+            try { p.getOutputStream().write(data.getBytes("UTF-8")); p.getOutputStream().flush(); call.resolve(); }
+            catch (IOException e) { call.reject(e.getMessage()); }
         }).start();
     }
 
-    // ---------------------------------------------------------------
-    // resizeTerminal — send SIGWINCH to update terminal dimensions
-    // ---------------------------------------------------------------
     @PluginMethod
     public void resizeTerminal(PluginCall call) {
-        String sessionId = call.getString("sessionId", DEFAULT_SESSION);
-        int cols = call.getInt("cols", 80);
-        int rows = call.getInt("rows", 24);
-
-        Process process = sessions.get(sessionId);
-        if (process == null) {
-            call.reject("No session: " + sessionId);
-            return;
-        }
-
-        new Thread(() -> {
-            try {
-                // Send stty resize command to the shell
-                String resizeCmd = String.format("stty cols %d rows %d\n", cols, rows);
-                process.getOutputStream().write(resizeCmd.getBytes());
-                process.getOutputStream().flush();
-
-                JSObject result = new JSObject();
-                result.put("cols", cols);
-                result.put("rows", rows);
-                call.resolve(result);
-            } catch (IOException e) {
-                call.reject("resizeTerminal failed: " + e.getMessage());
-            }
+        int cols = call.getInt("cols",80), rows = call.getInt("rows",24);
+        Process p = sessions.get(call.getString("sessionId",DEF));
+        if (p!=null) new Thread(()->{
+            try { p.getOutputStream().write(("stty cols "+cols+" rows "+rows+"\n").getBytes()); p.getOutputStream().flush(); }
+            catch(IOException ignored){}
         }).start();
+        JSObject r=new JSObject(); r.put("cols",cols); r.put("rows",rows); call.resolve(r);
     }
 
-    // ---------------------------------------------------------------
-    // stopSession — kill a named session
-    // ---------------------------------------------------------------
     @PluginMethod
-    public void stopSession(PluginCall call) {
-        String sessionId = call.getString("sessionId", DEFAULT_SESSION);
-        stopSessionInternal(sessionId);
-        call.resolve();
-    }
+    public void stopSession(PluginCall call) { kill(call.getString("sessionId",DEF)); call.resolve(); }
 
-    private void stopSessionInternal(String sessionId) {
-        Process p = sessions.get(sessionId);
-        if (p != null) {
-            p.destroy();
-            sessions.remove(sessionId);
-        }
-    }
-
-    private JSObject buildOutput(String sessionId, String data) {
-        JSObject obj = new JSObject();
-        obj.put("sessionId", sessionId);
-        obj.put("data", data);
-        return obj;
-    }
-
-    private void copyStream(InputStream in, OutputStream out) throws IOException {
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = in.read(buf)) != -1) {
-            out.write(buf, 0, n);
-        }
-    }
+    private void kill(String id) { Process p=sessions.remove(id); if(p!=null) try{p.destroy();}catch(Exception ignored){} }
 }
