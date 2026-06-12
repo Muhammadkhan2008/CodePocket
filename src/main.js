@@ -201,53 +201,232 @@ const EditorManager={
   },
 };
 
+// ═══ JS SHELL EMULATOR (works always, no Alpine needed) ═══
+const JSShell={
+  cwd:'/',history:[],histIndex:-1,inputBuf:'',
+  prompt(){return '\x1b[32mcodepocket\x1b[0m:\x1b[34m'+this.cwd+'\x1b[0m$ ';},
+  run(cmd,term){
+    cmd=cmd.trim();if(!cmd)return;
+    this.history.unshift(cmd);this.histIndex=-1;
+    const parts=cmd.split(/\s+/);const c=parts[0];const args=parts.slice(1);
+    let out='';
+    switch(c){
+      case 'ls':{
+        const files=Object.keys(FileManager.files||{});
+        out=files.length?files.map(f=>{const ext=(f.split('.').pop()||'').toLowerCase();const icons={js:'🟨',ts:'🔷',html:'🌐',css:'🎨',py:'🐍',java:'☕',cpp:'⚙️',md:'📝',json:'📋'};return '\x1b[36m'+(icons[ext]||'📄')+' '+f+'\x1b[0m';}).join('  '):'(no files)';break;}
+      case 'pwd':out=this.cwd;break;
+      case 'cd':{const d=args[0]||'/';this.cwd=d.startsWith('/')?d:this.cwd+'/'+d;out='';break;}
+      case 'cat':{
+        const fname=args[0]||'';
+        const content=FileManager.files[fname]||FileManager.files[this.cwd.replace(/^\//,'')+'/'+fname];
+        if(content!==undefined)out=content;
+        else out='\x1b[31mcat: '+fname+': No such file\x1b[0m';break;}
+      case 'echo':out=args.join(' ');break;
+      case 'clear':term.clear();return;
+      case 'cls':term.clear();return;
+      case 'help':
+        out=[
+          '\x1b[33m╔══════════════════════════════════════════╗\x1b[0m',
+          '\x1b[33m║      CodePocket Terminal Commands        ║\x1b[0m',
+          '\x1b[33m╚══════════════════════════════════════════╝\x1b[0m',
+          '\x1b[36mls\x1b[0m          - list files',
+          '\x1b[36mpwd\x1b[0m         - current directory',
+          '\x1b[36mcd [dir]\x1b[0m    - change directory',
+          '\x1b[36mcat [file]\x1b[0m  - show file content',
+          '\x1b[36mecho [text]\x1b[0m - print text',
+          '\x1b[36mclear/cls\x1b[0m   - clear terminal',
+          '\x1b[36mnode [code]\x1b[0m - run JavaScript',
+          '\x1b[36mrun\x1b[0m         - run active file',
+          '\x1b[36mopen [file]\x1b[0m - open file in editor',
+          '\x1b[36msave\x1b[0m        - save current file',
+          '\x1b[36mnew [name]\x1b[0m  - create new file',
+          '\x1b[36mrm [file]\x1b[0m   - delete file',
+          '\x1b[36mfiles\x1b[0m       - list all files',
+          '\x1b[36minfo\x1b[0m        - app info',
+          '\x1b[36mhelp\x1b[0m        - this help',
+        ].join('\r\n');break;
+      case 'node':case 'js':{
+        const code=args.join(' ');
+        if(!code){out='\x1b[33mUsage: node <javascript code>\x1b[0m\r\n\x1b[90mExample: node 2+2\x1b[0m';break;}
+        try{
+          const logs=[];const mockConsole={log:(...a)=>logs.push(a.join(' ')),warn:(...a)=>logs.push('⚠ '+a.join(' ')),error:(...a)=>logs.push('❌ '+a.join(' '))};
+          const fn=new Function('console',code);fn(mockConsole);
+          out=logs.length?logs.join('\r\n'):'\x1b[90m(no output)\x1b[0m';
+        }catch(e){out='\x1b[31m'+e.message+'\x1b[0m';}break;}
+      case 'run':{
+        const f=args[0]||FileManager.activeFile;
+        if(!f){out='\x1b[31mNo file to run\x1b[0m';break;}
+        document.getElementById('run-btn')?.click();out='\x1b[32mRunning '+f+'...\x1b[0m';break;}
+      case 'open':{
+        const f=args[0];if(!f){out='\x1b[31mUsage: open <filename>\x1b[0m';break;}
+        if(FileManager.files[f]!==undefined){FileManager.openFile(f);out='\x1b[32mOpened: '+f+'\x1b[0m';}
+        else out='\x1b[31mFile not found: '+f+'\r\nUse ls to see files\x1b[0m';break;}
+      case 'save':{
+        FileManager.save();out='\x1b[32m✅ Saved: '+(FileManager.activeFile||'none')+'\x1b[0m';break;}
+      case 'new':{
+        const n=args[0];if(!n){out='\x1b[31mUsage: new <filename>\x1b[0m';break;}
+        FileManager.files[n]='// '+n+'\n';FileManager.openFile(n);out='\x1b[32mCreated: '+n+'\x1b[0m';break;}
+      case 'rm':{
+        const f=args[0];if(!f){out='\x1b[31mUsage: rm <filename>\x1b[0m';break;}
+        if(FileManager.files[f]!==undefined){delete FileManager.files[f];FileManager.renderSidebar();out='\x1b[32mDeleted: '+f+'\x1b[0m';}
+        else out='\x1b[31mFile not found: '+f+'\x1b[0m';break;}
+      case 'files':
+        out=Object.keys(FileManager.files||{}).join('\r\n')||'(no files)';break;
+      case 'info':
+        out=['\x1b[36mCodePocket v2.0\x1b[0m',
+             'Files: '+Object.keys(FileManager.files||{}).length,
+             'Active: '+(FileManager.activeFile||'none'),
+             'Platform: '+(isNative()?'Android Native':'Web/Browser'),
+             'Storage: localStorage + IndexedDB'].join('\r\n');break;
+      case 'env':
+        out='TERM=xterm-256color\r\nSHELL=jshell\r\nPLATFORM='+(isNative()?'android':'web');break;
+      default:
+        out='\x1b[31m'+c+': command not found\x1b[0m\r\n\x1b[90mType help for available commands\x1b[0m';
+    }
+    if(out)term.writeln('\r\n'+out);
+  },
+};
+
 // ═══ TERMINAL MANAGER ═══
 const TerminalManager={
   panel:null,container:null,tabsContainer:null,terminals:{},activeSessionId:null,sessionCounter:0,
+  prootAvailable:false,
+
   async init(){
-    this.panel=document.getElementById('terminal-panel');this.container=document.getElementById('terminal-output');this.tabsContainer=document.getElementById('terminal-tabs');
-    if(!this.container)return;this.container.innerHTML='';this.container.style.cssText='overflow:hidden;padding:0;';
+    this.panel=document.getElementById('terminal-panel');
+    this.container=document.getElementById('terminal-output');
+    this.tabsContainer=document.getElementById('terminal-tabs');
+    if(!this.container)return;
+    this.container.innerHTML='';
+    this.container.style.cssText='overflow:hidden;padding:0;';
+
+    // Try to init PRoot (Android only)
     if(isNative()&&PRootPlugin){
       try{
-        PRootPlugin.addListener('terminal_output',info=>{if(this.terminals[info.sessionId])this.terminals[info.sessionId].term.write(info.data);});
+        PRootPlugin.addListener('terminal_output',info=>{
+          if(this.terminals[info.sessionId])
+            this.terminals[info.sessionId].term.write(info.data);
+        });
         await PRootPlugin.initEnvironment();
-      }catch(e){console.warn('PRoot init failed:',e.message);}
+        this.prootAvailable=true;
+      }catch(e){
+        console.warn('PRoot not available:',e.message);
+        this.prootAvailable=false;
+      }
     }
     this.createTerminal();
     document.getElementById('add-terminal-btn')?.addEventListener('click',()=>this.createTerminal());
   },
+
   async createTerminal(){
-    this.sessionCounter++;const sessionId='term_'+this.sessionCounter;
-    const tabEl=document.createElement('button');tabEl.innerText='Term '+this.sessionCounter;tabEl.style.cssText='padding:5px 10px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;outline:none;';
-    const termContainer=document.createElement('div');termContainer.style.cssText='width:100%;height:100%;display:none;';
-    this.tabsContainer?.appendChild(tabEl);this.container.appendChild(termContainer);
-    const term=new Terminal({theme:{background:'#0d0d0d',foreground:'#f8f8f2',cursor:'#f8f8f2'},fontSize:14,fontFamily:'Fira Code, Consolas, monospace',cursorBlink:true,scrollback:5000});
-    const fitAddon=new FitAddon(),webLinksAddon=new WebLinksAddon();
-    term.loadAddon(fitAddon);term.loadAddon(webLinksAddon);term.open(termContainer);
-    term.onData(data=>{
-      if(isNative() && PRootPlugin){
-        try{PRootPlugin.writeData({sessionId,data});}catch(e){term.write(data);}
-      }else{term.write(data);}
+    this.sessionCounter++;
+    const sessionId='term_'+this.sessionCounter;
+    const tabEl=document.createElement('button');
+    tabEl.innerText='Term '+this.sessionCounter;
+    tabEl.style.cssText='padding:5px 10px;border:none;background:transparent;color:var(--text-secondary);cursor:pointer;outline:none;font-size:12px;';
+    const termContainer=document.createElement('div');
+    termContainer.style.cssText='width:100%;height:100%;display:none;';
+    this.tabsContainer?.appendChild(tabEl);
+    this.container.appendChild(termContainer);
+
+    const term=new Terminal({
+      theme:{background:'#0d0d0d',foreground:'#f8f8f2',cursor:'#89b4fa',
+             black:'#1e1e2e',brightBlack:'#45475a',
+             red:'#f38ba8',brightRed:'#f38ba8',
+             green:'#a6e3a1',brightGreen:'#a6e3a1',
+             yellow:'#f9e2af',brightYellow:'#f9e2af',
+             blue:'#89b4fa',brightBlue:'#89b4fa',
+             cyan:'#94e2d5',brightCyan:'#94e2d5'},
+      fontSize:14,fontFamily:'Fira Code, Consolas, monospace',
+      cursorBlink:true,scrollback:5000,
+      convertEol:true,
     });
-    this.terminals[sessionId]={term,fitAddon,tabEl,termContainer};
-    tabEl.addEventListener('click',()=>this.switchTerminal(sessionId));this.switchTerminal(sessionId);
-    if(isNative() && PRootPlugin){
+    const fitAddon=new FitAddon();
+    const webLinksAddon=new WebLinksAddon();
+    term.loadAddon(fitAddon);
+    term.loadAddon(webLinksAddon);
+    term.open(termContainer);
+
+    // ── Input handling ──
+    const shellData={inputBuf:'',histIndex:-1};
+
+    term.onData(data=>{
+      // If native + PRoot available → send to real shell
+      if(isNative()&&PRootPlugin&&this.prootAvailable){
+        try{PRootPlugin.writeData({sessionId,data});return;}catch(e){}
+      }
+
+      // JS Shell mode
+      const code=data.charCodeAt(0);
+
+      if(code===13){ // Enter
+        term.write('\r\n');
+        const cmd=shellData.inputBuf.trim();
+        shellData.inputBuf='';
+        if(cmd){
+          JSShell.run(cmd,term);
+        }
+        term.write('\r\n'+JSShell.prompt());
+
+      }else if(code===127||code===8){ // Backspace
+        if(shellData.inputBuf.length>0){
+          shellData.inputBuf=shellData.inputBuf.slice(0,-1);
+          term.write('\b \b');
+        }
+
+      }else if(data==='\x1b[A'){ // Up arrow - history
+        if(shellData.histIndex<JSShell.history.length-1){
+          shellData.histIndex++;
+          const prev=JSShell.history[shellData.histIndex]||'';
+          // Clear current input
+          term.write('\r'+JSShell.prompt()+' '.repeat(shellData.inputBuf.length+2));
+          term.write('\r'+JSShell.prompt());
+          shellData.inputBuf=prev;
+          term.write(prev);
+        }
+
+      }else if(data==='\x1b[B'){ // Down arrow - history
+        if(shellData.histIndex>0){
+          shellData.histIndex--;
+          const next=JSShell.history[shellData.histIndex]||'';
+          term.write('\r'+JSShell.prompt()+' '.repeat(shellData.inputBuf.length+2));
+          term.write('\r'+JSShell.prompt());
+          shellData.inputBuf=next;
+          term.write(next);
+        }
+
+      }else if(code>=32){ // Printable chars
+        shellData.inputBuf+=data;
+        term.write(data);
+      }
+    });
+
+    this.terminals[sessionId]={term,fitAddon,tabEl,termContainer,shellData};
+    tabEl.addEventListener('click',()=>this.switchTerminal(sessionId));
+    this.switchTerminal(sessionId);
+
+    // Welcome message
+    if(isNative()&&PRootPlugin&&this.prootAvailable){
       try{
         await PRootPlugin.startSession({sessionId});
-        term.writeln('\x1b[32m✅ Alpine Linux Terminal Ready\x1b[0m');
+        // PRoot will send its own welcome message
       }catch(e){
-        term.writeln('\x1b[33m⚠️  Alpine terminal unavailable\x1b[0m');
-        term.writeln('\x1b[36mUsing output console mode\x1b[0m');
-        term.writeln('\x1b[90mTip: Press Run ▶ to execute JS/HTML files\x1b[0m\r\n');
+        this.prootAvailable=false;
+        this._showJSShellWelcome(term);
       }
     }else{
-      term.writeln('\x1b[32m╔══════════════════════════════╗\x1b[0m');
-      term.writeln('\x1b[32m║   CodePocket v2.0 Console    ║\x1b[0m');
-      term.writeln('\x1b[32m╚══════════════════════════════╝\x1b[0m');
-      term.writeln('\x1b[33mPress ▶ Run to execute JS/HTML files\x1b[0m');
-      term.writeln('\x1b[36mAlpine Linux terminal available in APK build\x1b[0m');
-      term.writeln('');
+      this._showJSShellWelcome(term);
     }
+  },
+
+  _showJSShellWelcome(term){
+    term.writeln('\x1b[32m╔═══════════════════════════════════════╗\x1b[0m');
+    term.writeln('\x1b[32m║    CodePocket v2.0 Terminal           ║\x1b[0m');
+    term.writeln('\x1b[32m╚═══════════════════════════════════════╝\x1b[0m');
+    term.writeln('\x1b[90mType \x1b[36mhelp\x1b[90m to see all commands\x1b[0m');
+    term.writeln('\x1b[90mType \x1b[36mls\x1b[90m to list files, \x1b[36mcat file.js\x1b[90m to view\x1b[0m');
+    term.writeln('');
+    term.write(JSShell.prompt());
   },
   switchTerminal(sessionId){
     this.activeSessionId=sessionId;
