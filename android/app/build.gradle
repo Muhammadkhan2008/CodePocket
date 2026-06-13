@@ -22,6 +22,53 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    
+    // Copy web assets before building
+    preBuild {
+        doLast {
+            def assetsDir = file('src/main/assets/www')
+            assetsDir.mkdirs()
+            
+            // Copy from dist if it exists (built app), otherwise from root
+            def sourceDir = file('../../dist')
+            if (!sourceDir.exists()) {
+                sourceDir = file('../../')
+            }
+            
+            println "=== Copying web assets from: " + sourceDir.absolutePath
+            
+            // Copy index.html
+            def indexHtml = new File(sourceDir, 'index.html')
+            if (indexHtml.exists()) {
+                println "Copying index.html..."
+                copy {
+                    from indexHtml
+                    into assetsDir
+                }
+            }
+            
+            // Copy src folder
+            def srcFolder = new File(sourceDir, 'src')
+            if (srcFolder.exists()) {
+                println "Copying src folder..."
+                copy {
+                    from srcFolder
+                    into assetsDir
+                }
+            }
+            
+            // Verify
+            println "=== Web assets verified ==="
+            assetsDir.eachFile { f -> println "  ✓ " + f.name }
+            
+            def indexCheck = new File(assetsDir, 'index.html')
+            if (indexCheck.exists()) {
+                println "✅ index.html READY"
+            } else {
+                println "❌ WARNING: index.html not found!"
+            }
+        }
+    }
 }
 
 repositories {
