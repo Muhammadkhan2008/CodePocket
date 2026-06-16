@@ -1,8 +1,6 @@
 // ==========================================
-// STORAGE SERVICE - Fixed Implementation
+// STORAGE SERVICE - localStorage + IndexedDB
 // ==========================================
-import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 
 export const StorageService = {
   backend: 'localStorage',
