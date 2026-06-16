@@ -1,5 +1,16 @@
 // CodePocket v2.0 - main.js
 // Features: AI, FTP, Git, 10 Themes, Markdown, Debug, IndexedDB
+
+// Global error handler - prevents white screen
+window.onerror = (msg, url, line) => {
+  const el = document.getElementById('error-overlay');
+  if (el) { el.style.display='flex'; el.querySelector('p').textContent = msg + ' (line '+line+')'; }
+  console.error('CodePocket Error:', msg, url, line);
+};
+window.addEventListener('unhandledrejection', e => {
+  console.error('Unhandled Promise:', e.reason);
+});
+
 import { EditorView, basicSetup } from 'codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { html } from '@codemirror/lang-html';
@@ -24,7 +35,6 @@ import { autocompletion, closeBrackets } from '@codemirror/autocomplete';
 import { lintGutter } from '@codemirror/lint';
 import { search } from '@codemirror/search';
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -46,7 +56,11 @@ function detectLanguage(f=''){const ext=(f.split('.').pop()||'').toLowerCase();r
 const languageCompartment=new Compartment(),wrapCompartment=new Compartment(),themeCompartment=new Compartment();
 // PRootPlugin - only available on Android native build
 let PRootPlugin = null;
-try { PRootPlugin = registerPlugin('PRootPlugin'); } catch(e) { PRootPlugin = null; }
+try {
+  if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
+    PRootPlugin = registerPlugin('PRootPlugin');
+  }
+} catch(e) { PRootPlugin = null; }
 const isNative = () => { try { return Capacitor.isNativePlatform(); } catch(e) { return false; } };
 function renderMarkdown(t){return t.replace(/^### (.+)$/gm,'<h3 style="color:var(--accent)">'+'$1'+'</h3>').replace(/^## (.+)$/gm,'<h2 style="color:var(--accent)">'+'$1'+'</h2>').replace(/^# (.+)$/gm,'<h1 style="color:var(--accent)">'+'$1'+'</h1>').replace(/\*\*(.+?)\*\*/g,'<strong>'+'$1'+'</strong>').replace(/\*(.+?)\*/g,'<em>'+'$1'+'</em>').replace(/\n\n/g,'<br><br>');}
 window.CodePocketAPI={version:'2.0',customRunHandler:null,ai:AIService,git:GitService,debug:DebugService,ftp:FTPService,storage:StorageService,theme:ThemeService,onRun(fn){this.customRunHandler=fn;},getCode(){return FileManager.getCurrentContent();},setCode(t){EditorManager.setContent(t,FileManager.activeFile);},print(t,type='system'){TerminalManager.print(t,type);},UI:{setTheme(c){for(const[k,v]of Object.entries(c))document.documentElement.style.setProperty(k,v);},addSidebarPanel(id,title,icon,htmlContent){const nav=document.querySelector('.activity-top');const btn=document.createElement('button');btn.className='activity-icon plugin-icon';btn.setAttribute('data-panel',id);btn.title=title;btn.innerHTML=icon;nav.appendChild(btn);const panel=document.createElement('div');panel.id='panel-'+id;panel.className='side-panel hidden';panel.innerHTML='<div class="panel-header"><span>'+title.toUpperCase()+'</span></div><div class="panel-content">'+htmlContent+'</div>';document.getElementById('secondary-panel').appendChild(panel);btn.addEventListener('click',()=>{document.querySelectorAll('.activity-icon').forEach(i=>i.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.side-panel').forEach(p=>p.classList.add('hidden'));panel.classList.remove('hidden');});}},Commands:{register(id,title,cb){UIManager.customCommands=UIManager.customCommands||{};UIManager.customCommands[id]=cb;const li=document.createElement('li');li.setAttribute('data-cmd',id);li.innerHTML='🔌 '+title;document.getElementById('palette-results').appendChild(li);}}};
@@ -203,87 +217,92 @@ const EditorManager={
 
 // ═══ JS SHELL EMULATOR (works always, no Alpine needed) ═══
 const JSShell={
-  cwd:'/',history:[],histIndex:-1,inputBuf:'',
-  prompt(){return '\x1b[32mcodepocket\x1b[0m:\x1b[34m'+this.cwd+'\x1b[0m$ ';},
+  cwd:'/',history:[],histIndex:-1,inputBuf:'',aliases:{},
+  env:{TERM:'xterm-256color',SHELL:'/bin/jsh',USER:'coder',HOME:'/home/coder',PWD:'/'},
+  prompt(){return '\x1b[32mcoder@codepocket\x1b[0m:\x1b[34m'+this.cwd+'\x1b[0m$ ';},
+  _resolve(name){
+    if(name in FileManager.files)return name;
+    const p=(this.cwd==='/'?'':this.cwd.replace(/^\//,'')+'/')+name;
+    if(p in FileManager.files)return p;
+    return null;
+  },
   run(cmd,term){
     cmd=cmd.trim();if(!cmd)return;
     this.history.unshift(cmd);this.histIndex=-1;
-    const parts=cmd.split(/\s+/);const c=parts[0];const args=parts.slice(1);
+    // alias expansion
+    const firstWord=cmd.split(/\s+/)[0];
+    if(this.aliases[firstWord])cmd=this.aliases[firstWord]+cmd.slice(firstWord.length);
+    // pipe / chained support (simple ; splitting)
+    if(cmd.includes(' && ')){cmd.split(' && ').forEach(c=>this.run(c,term));return;}
+    const parts=cmd.match(/(?:[^\s"]+|"[^"]*")+/g)||[];
+    const c=parts[0];const args=parts.slice(1).map(a=>a.replace(/^"|"$/g,''));
     let out='';
     switch(c){
-      case 'ls':{
-        const files=Object.keys(FileManager.files||{});
-        out=files.length?files.map(f=>{const ext=(f.split('.').pop()||'').toLowerCase();const icons={js:'🟨',ts:'🔷',html:'🌐',css:'🎨',py:'🐍',java:'☕',cpp:'⚙️',md:'📝',json:'📋'};return '\x1b[36m'+(icons[ext]||'📄')+' '+f+'\x1b[0m';}).join('  '):'(no files)';break;}
+      case 'ls':case 'dir':{
+        const all=Object.keys(FileManager.files||{});
+        const longFmt=args.includes('-l')||args.includes('-la')||args.includes('-al');
+        if(!all.length){out='\x1b[90m(empty - use: touch file.js)\x1b[0m';break;}
+        if(longFmt){out=all.map(f=>{const sz=(FileManager.files[f]||'').length;return '\x1b[90m-rw-r--r-- 1 coder coder '+String(sz).padStart(6)+'\x1b[0m \x1b[36m'+f+'\x1b[0m';}).join('\r\n');}
+        else{out=all.map(f=>{const ext=(f.split('.').pop()||'').toLowerCase();const icons={js:'🟨',ts:'🔷',html:'🌐',css:'🎨',py:'🐍',java:'☕',cpp:'⚙️',c:'⚙️',md:'📝',json:'📋',go:'🐹',rs:'🦀',php:'🐘',sql:'🗄️',sh:'📜',vue:'💚'};return '\x1b[36m'+(icons[ext]||'📄')+' '+f+'\x1b[0m';}).join('  ');}break;}
       case 'pwd':out=this.cwd;break;
-      case 'cd':{const d=args[0]||'/';this.cwd=d.startsWith('/')?d:this.cwd+'/'+d;out='';break;}
-      case 'cat':{
-        const fname=args[0]||'';
-        const content=FileManager.files[fname]||FileManager.files[this.cwd.replace(/^\//,'')+'/'+fname];
-        if(content!==undefined)out=content;
-        else out='\x1b[31mcat: '+fname+': No such file\x1b[0m';break;}
-      case 'echo':out=args.join(' ');break;
-      case 'clear':term.clear();return;
-      case 'cls':term.clear();return;
-      case 'help':
-        out=[
-          '\x1b[33m╔══════════════════════════════════════════╗\x1b[0m',
-          '\x1b[33m║      CodePocket Terminal Commands        ║\x1b[0m',
-          '\x1b[33m╚══════════════════════════════════════════╝\x1b[0m',
-          '\x1b[36mls\x1b[0m          - list files',
-          '\x1b[36mpwd\x1b[0m         - current directory',
-          '\x1b[36mcd [dir]\x1b[0m    - change directory',
-          '\x1b[36mcat [file]\x1b[0m  - show file content',
-          '\x1b[36mecho [text]\x1b[0m - print text',
-          '\x1b[36mclear/cls\x1b[0m   - clear terminal',
-          '\x1b[36mnode [code]\x1b[0m - run JavaScript',
-          '\x1b[36mrun\x1b[0m         - run active file',
-          '\x1b[36mopen [file]\x1b[0m - open file in editor',
-          '\x1b[36msave\x1b[0m        - save current file',
-          '\x1b[36mnew [name]\x1b[0m  - create new file',
-          '\x1b[36mrm [file]\x1b[0m   - delete file',
-          '\x1b[36mfiles\x1b[0m       - list all files',
-          '\x1b[36minfo\x1b[0m        - app info',
-          '\x1b[36mhelp\x1b[0m        - this help',
-        ].join('\r\n');break;
+      case 'cd':{const d=args[0]||'/';if(d==='..'){this.cwd=this.cwd.split('/').slice(0,-1).join('/')||'/';}else if(d==='~'||d==='/'){this.cwd='/';}else{this.cwd=d.startsWith('/')?d:(this.cwd==='/'?'/':this.cwd+'/')+d;}this.env.PWD=this.cwd;out='';break;}
+      case 'cat':{const fname=args[0]||'';const real=this._resolve(fname);if(real!==null)out=FileManager.files[real];else out='\x1b[31mcat: '+fname+': No such file\x1b[0m';break;}
+      case 'echo':{
+        let text=args.join(' ');
+        text=text.replace(/\$(\w+)/g,(m,k)=>this.env[k]||'');
+        if(args.includes('>')||args.includes('>>')){const idx=args.findIndex(a=>a==='>'||a==='>>');const fn=args[idx+1];const content=args.slice(0,idx).join(' ');if(fn){const append=args[idx]==='>>';FileManager.files[fn]=(append&&FileManager.files[fn]?FileManager.files[fn]+'\n':'')+content;FileManager.renderSidebar?.();out='\x1b[32mWrote to '+fn+'\x1b[0m';}}
+        else out=text;break;}
+      case 'touch':{const fn=args[0];if(!fn){out='\x1b[31mUsage: touch <file>\x1b[0m';break;}if(!(fn in FileManager.files))FileManager.files[fn]='';FileManager.renderSidebar?.();out='\x1b[32mCreated '+fn+'\x1b[0m';break;}
+      case 'mkdir':{out='\x1b[90mmkdir: virtual FS is flat (files only)\x1b[0m';break;}
+      case 'cp':{const[s,d]=args;const real=this._resolve(s);if(real===null){out='\x1b[31mcp: '+s+': not found\x1b[0m';break;}FileManager.files[d]=FileManager.files[real];FileManager.renderSidebar?.();out='\x1b[32mCopied '+s+' -> '+d+'\x1b[0m';break;}
+      case 'mv':{const[s,d]=args;const real=this._resolve(s);if(real===null){out='\x1b[31mmv: '+s+': not found\x1b[0m';break;}FileManager.files[d]=FileManager.files[real];delete FileManager.files[real];FileManager.renderSidebar?.();out='\x1b[32mMoved '+s+' -> '+d+'\x1b[0m';break;}
+      case 'rm':case 'del':{const f=args[0];if(!f){out='\x1b[31mUsage: rm <file>\x1b[0m';break;}const real=this._resolve(f);if(real!==null){delete FileManager.files[real];FileManager.renderSidebar?.();out='\x1b[32mDeleted '+f+'\x1b[0m';}else out='\x1b[31mrm: '+f+': not found\x1b[0m';break;}
+      case 'grep':{const pat=args[0];const fn=args[1];if(!pat){out='\x1b[31mUsage: grep <pattern> [file]\x1b[0m';break;}const search=(name,txt)=>{const m=[];txt.split('\n').forEach((l,i)=>{if(l.includes(pat))m.push('\x1b[36m'+name+':'+(i+1)+'\x1b[0m: '+l.replace(pat,'\x1b[33m'+pat+'\x1b[0m'));});return m;};let res=[];if(fn){const real=this._resolve(fn);if(real!==null)res=search(fn,FileManager.files[real]);}else{Object.entries(FileManager.files).forEach(([n,t])=>res.push(...search(n,t)));}out=res.length?res.join('\r\n'):'\x1b[90m(no matches)\x1b[0m';break;}
+      case 'wc':{const fn=args[0];const real=this._resolve(fn);if(real===null){out='\x1b[31mwc: '+fn+': not found\x1b[0m';break;}const t=FileManager.files[real];out='  '+t.split('\n').length+' lines  '+t.split(/\s+/).filter(Boolean).length+' words  '+t.length+' chars  '+fn;break;}
+      case 'head':{const fn=args[args.length-1];const real=this._resolve(fn);if(real===null){out='\x1b[31mhead: not found\x1b[0m';break;}out=FileManager.files[real].split('\n').slice(0,10).join('\r\n');break;}
+      case 'tail':{const fn=args[args.length-1];const real=this._resolve(fn);if(real===null){out='\x1b[31mtail: not found\x1b[0m';break;}out=FileManager.files[real].split('\n').slice(-10).join('\r\n');break;}
+      case 'find':{const pat=args[0]||'';out=Object.keys(FileManager.files).filter(f=>f.includes(pat)).map(f=>'./'+f).join('\r\n')||'\x1b[90m(none)\x1b[0m';break;}
+      case 'date':out=new Date().toString();break;
+      case 'whoami':out='coder';break;
+      case 'hostname':out='codepocket';break;
+      case 'uname':out='CodePocket JSShell 2.0 ('+(isNative()?'Android':'Web')+')';break;
+      case 'history':out=this.history.slice(0,20).map((h,i)=>'  '+(i+1)+'  '+h).join('\r\n');break;
+      case 'alias':{if(!args.length){out=Object.entries(this.aliases).map(([k,v])=>k+'='+v).join('\r\n')||'\x1b[90m(no aliases)\x1b[0m';}else{const[k,...v]=args.join(' ').split('=');this.aliases[k.trim()]=v.join('=').replace(/^['"]|['"]$/g,'');out='\x1b[32malias set\x1b[0m';}break;}
+      case 'export':{const[k,...v]=args.join(' ').split('=');if(k)this.env[k.trim()]=v.join('=');out='';break;}
+      case 'env':case 'printenv':out=Object.entries(this.env).map(([k,v])=>k+'='+v).join('\r\n');break;
+      case 'clear':case 'cls':term.clear();return;
+      case 'echo-color':out='\x1b[31mR\x1b[32mG\x1b[33mY\x1b[34mB\x1b[35mM\x1b[36mC\x1b[0m';break;
       case 'node':case 'js':{
         const code=args.join(' ');
-        if(!code){out='\x1b[33mUsage: node <javascript code>\x1b[0m\r\n\x1b[90mExample: node 2+2\x1b[0m';break;}
-        try{
-          const logs=[];const mockConsole={log:(...a)=>logs.push(a.join(' ')),warn:(...a)=>logs.push('⚠ '+a.join(' ')),error:(...a)=>logs.push('❌ '+a.join(' '))};
-          const fn=new Function('console',code);fn(mockConsole);
-          out=logs.length?logs.join('\r\n'):'\x1b[90m(no output)\x1b[0m';
-        }catch(e){out='\x1b[31m'+e.message+'\x1b[0m';}break;}
-      case 'run':{
-        const f=args[0]||FileManager.activeFile;
-        if(!f){out='\x1b[31mNo file to run\x1b[0m';break;}
-        document.getElementById('run-btn')?.click();out='\x1b[32mRunning '+f+'...\x1b[0m';break;}
-      case 'open':{
-        const f=args[0];if(!f){out='\x1b[31mUsage: open <filename>\x1b[0m';break;}
-        if(FileManager.files[f]!==undefined){FileManager.openFile(f);out='\x1b[32mOpened: '+f+'\x1b[0m';}
-        else out='\x1b[31mFile not found: '+f+'\r\nUse ls to see files\x1b[0m';break;}
-      case 'save':{
-        FileManager.save();out='\x1b[32m✅ Saved: '+(FileManager.activeFile||'none')+'\x1b[0m';break;}
-      case 'new':{
-        const n=args[0];if(!n){out='\x1b[31mUsage: new <filename>\x1b[0m';break;}
-        FileManager.files[n]='// '+n+'\n';FileManager.openFile(n);out='\x1b[32mCreated: '+n+'\x1b[0m';break;}
-      case 'rm':{
-        const f=args[0];if(!f){out='\x1b[31mUsage: rm <filename>\x1b[0m';break;}
-        if(FileManager.files[f]!==undefined){delete FileManager.files[f];FileManager.renderSidebar();out='\x1b[32mDeleted: '+f+'\x1b[0m';}
-        else out='\x1b[31mFile not found: '+f+'\x1b[0m';break;}
-      case 'files':
-        out=Object.keys(FileManager.files||{}).join('\r\n')||'(no files)';break;
-      case 'info':
-        out=['\x1b[36mCodePocket v2.0\x1b[0m',
-             'Files: '+Object.keys(FileManager.files||{}).length,
-             'Active: '+(FileManager.activeFile||'none'),
-             'Platform: '+(isNative()?'Android Native':'Web/Browser'),
-             'Storage: localStorage + IndexedDB'].join('\r\n');break;
-      case 'env':
-        out='TERM=xterm-256color\r\nSHELL=jshell\r\nPLATFORM='+(isNative()?'android':'web');break;
+        if(!code){out='\x1b[33mUsage: node <code> | Example: node 2+2\x1b[0m';break;}
+        try{const logs=[];const mockConsole={log:(...a)=>logs.push(a.map(x=>typeof x==='object'?JSON.stringify(x):String(x)).join(' ')),warn:(...a)=>logs.push('\x1b[33m⚠ '+a.join(' ')+'\x1b[0m'),error:(...a)=>logs.push('\x1b[31m❌ '+a.join(' ')+'\x1b[0m')};const fn=new Function('console','return (function(){'+(code.includes('return')||code.includes(';')||code.includes('console')?code:'return '+code)+'})()');const ret=fn(mockConsole);if(ret!==undefined&&logs.length===0)logs.push(typeof ret==='object'?JSON.stringify(ret,null,2):String(ret));out=logs.length?logs.join('\r\n'):'\x1b[90m(no output)\x1b[0m';}catch(e){out='\x1b[31m'+e.message+'\x1b[0m';}break;}
+      case 'python':case 'python3':case 'py':out='\x1b[33m🐍 Python needs Alpine Linux (Android only). Falling back...\x1b[0m\r\n\x1b[90mUse: node for JavaScript execution\x1b[0m';break;
+      case 'calc':case 'bc':{try{out='= '+new Function('return '+args.join(' '))();}catch(e){out='\x1b[31mInvalid expression\x1b[0m';}break;}
+      case 'run':{const f=args[0]||FileManager.activeFile;if(!f){out='\x1b[31mNo file to run\x1b[0m';break;}document.getElementById('run-btn')?.click();out='\x1b[32m▶ Running '+f+'\x1b[0m';break;}
+      case 'open':case 'edit':{const f=args[0];if(!f){out='\x1b[31mUsage: open <file>\x1b[0m';break;}const real=this._resolve(f);if(real!==null){FileManager.openFile(real);out='\x1b[32mOpened '+f+'\x1b[0m';}else out='\x1b[31m'+f+': not found\x1b[0m';break;}
+      case 'save':{FileManager.save();out='\x1b[32m✅ Saved '+(FileManager.activeFile||'none')+'\x1b[0m';break;}
+      case 'new':{const n=args[0];if(!n){out='\x1b[31mUsage: new <file>\x1b[0m';break;}FileManager.files[n]='';FileManager.openFile(n);out='\x1b[32mCreated '+n+'\x1b[0m';break;}
+      case 'write':{const fn=args[0];const content=args.slice(1).join(' ');if(!fn){out='\x1b[31mUsage: write <file> <content>\x1b[0m';break;}FileManager.files[fn]=content;FileManager.renderSidebar?.();out='\x1b[32mWrote '+fn+'\x1b[0m';break;}
+      case 'files':out=Object.keys(FileManager.files||{}).join('\r\n')||'\x1b[90m(no files)\x1b[0m';break;
+      case 'theme':{const t=args[0];if(!t){out='Available: '+ThemeService.getList().map(x=>x.id).join(', ');break;}ThemeService.apply(t,EditorManager.view);out='\x1b[32m🎨 Theme: '+t+'\x1b[0m';break;}
+      case 'git':{const sub=args[0];if(sub==='status')document.getElementById('git-status-btn')?.click();else if(sub==='push')document.getElementById('git-push-btn')?.click();out='\x1b[36mgit '+(sub||'')+' → check Git panel\x1b[0m';break;}
+      case 'lint':{EditorManager._runLint?.();out='\x1b[36mLinting active file...\x1b[0m';break;}
+      case 'fmt':case 'format':{EditorManager._runFormat?.();out='\x1b[36mFormatting...\x1b[0m';break;}
+      case 'info':out=['\x1b[36m═══ CodePocket v2.0 ═══\x1b[0m','Files: '+Object.keys(FileManager.files||{}).length,'Active: '+(FileManager.activeFile||'none'),'Platform: '+(isNative()?'Android Native':'Web/Browser'),'Alpine: '+(TerminalManager.prootAvailable?'✅ Available':'❌ Using JSShell'),'Storage: localStorage + IndexedDB'].join('\r\n');break;
+      case 'neofetch':out=['\x1b[36m   ___          _\x1b[0m','\x1b[36m  / __\\___   __| | ___\x1b[0m  \x1b[33mcoder@codepocket\x1b[0m','\x1b[36m / /  / _ \\ / _` |/ _ \\\x1b[0m  \x1b[90m─────────────────\x1b[0m','\x1b[36m/ /__| (_) | (_| |  __/\x1b[0m  OS: CodePocket v2.0','\x1b[36m\\____/\\___/ \\__,_|\\___|\x1b[0m  Shell: JSShell','                         Files: '+Object.keys(FileManager.files||{}).length].join('\r\n');break;
+      case 'help':case '?':
+        out=['\x1b[33m═══════ CodePocket Terminal Commands ═══════\x1b[0m',
+          '\x1b[36mFiles:\x1b[0m  ls, cat, touch, rm, cp, mv, find, head, tail, wc, grep',
+          '\x1b[36mEditor:\x1b[0m open, edit, new, save, write, run, lint, fmt',
+          '\x1b[36mCode:\x1b[0m   node <js>, calc <expr>',
+          '\x1b[36mSystem:\x1b[0m pwd, cd, echo, env, export, alias, date, whoami, history',
+          '\x1b[36mTools:\x1b[0m  theme <name>, git status, clear, info, neofetch',
+          '\x1b[90mTip: echo text > file.txt  |  node 2+2  |  grep word\x1b[0m'].join('\r\n');break;
+      case 'exit':out='\x1b[90mTerminal stays open. Use the ✕ tab button to close.\x1b[0m';break;
       default:
-        out='\x1b[31m'+c+': command not found\x1b[0m\r\n\x1b[90mType help for available commands\x1b[0m';
+        out='\x1b[31m'+c+': command not found\x1b[0m \x1b[90m(type help)\x1b[0m';
     }
-    if(out)term.writeln('\r\n'+out);
+    if(out!=='')term.writeln('\r\n'+out);
   },
 };
 
