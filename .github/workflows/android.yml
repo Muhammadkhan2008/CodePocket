@@ -40,7 +40,7 @@ jobs:
             -o public/native/alpine.bin
           [ -s public/native/alpine.bin ] && echo "alpine.bin OK: $(du -sh public/native/alpine.bin)" || { echo "alpine FAILED"; exit 1; }
 
-          echo "=== Downloading PRoot binaries from termux (v5.1.107.78-1) ==="
+          echo "=== Downloading PRoot binaries + LOADERS from termux (v5.1.107.78-1) ==="
           BASE_URL="https://packages.termux.dev/apt/termux-main/pool/main/p/proot"
 
           for ARCH in aarch64 arm i686 x86_64; do
@@ -50,14 +50,26 @@ jobs:
               EXTRACT_DIR="/tmp/proot_${ARCH}_out"
               dpkg-deb -x "${DEB_FILE}" "${EXTRACT_DIR}" 2>/dev/null || true
               BIN=$(find "${EXTRACT_DIR}" -name "proot" -type f 2>/dev/null | head -1)
+              LOADER=$(find "${EXTRACT_DIR}" -path "*libexec/proot/loader" -type f 2>/dev/null | head -1)
+              LOADER32=$(find "${EXTRACT_DIR}" -path "*libexec/proot/loader32" -type f 2>/dev/null | head -1)
+              case "${ARCH}" in
+                aarch64) SUFFIX=arm64 ;;
+                arm)     SUFFIX=arm ;;
+                x86_64)  SUFFIX=x86_64 ;;
+                i686)    SUFFIX=x86 ;;
+              esac
               if [ -n "${BIN}" ] && [ -f "${BIN}" ]; then
-                case "${ARCH}" in
-                  aarch64) cp "${BIN}" public/native/proot_arm64 ;;
-                  arm)     cp "${BIN}" public/native/proot_arm ;;
-                  x86_64)  cp "${BIN}" public/native/proot_x86_64 ;;
-                  i686)    cp "${BIN}" public/native/proot_x86 ;;
-                esac
-                echo "proot_${ARCH} OK: $(du -sh ${BIN})"
+                cp "${BIN}" "public/native/proot_${SUFFIX}"
+                echo "proot_${SUFFIX} OK: $(du -sh ${BIN} | cut -f1)"
+              fi
+              # CRITICAL: proot needs loader binaries to work (PROOT_LOADER env)
+              if [ -n "${LOADER}" ] && [ -f "${LOADER}" ]; then
+                cp "${LOADER}" "public/native/loader_${SUFFIX}"
+                echo "loader_${SUFFIX} OK: $(du -sh ${LOADER} | cut -f1)"
+              fi
+              if [ -n "${LOADER32}" ] && [ -f "${LOADER32}" ]; then
+                cp "${LOADER32}" "public/native/loader32_${SUFFIX}"
+                echo "loader32_${SUFFIX} OK"
               fi
             else
               echo "proot_${ARCH} deb download failed (non-fatal)"
@@ -66,7 +78,8 @@ jobs:
 
           echo "=== Final assets ==="
           ls -lh public/native/
-          [ -s public/native/proot_arm64 ] && echo "proot_arm64: READY" || echo "proot_arm64: MISSING (will use system shell)"
+          [ -s public/native/proot_arm64 ] && echo "proot_arm64: READY" || echo "proot_arm64: MISSING"
+          [ -s public/native/loader_arm64 ] && echo "loader_arm64: READY" || echo "loader_arm64: MISSING (proot will fail!)"
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
