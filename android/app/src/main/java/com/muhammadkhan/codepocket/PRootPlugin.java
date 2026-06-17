@@ -26,6 +26,17 @@ public class PRootPlugin extends Plugin {
         return "proot_arm64";
     }
 
+    // Loader asset name matches the ABI - proot REQUIRES this to work
+    private String getLoaderAsset() {
+        String[] a = Build.SUPPORTED_ABIS;
+        if (a != null && a.length > 0) {
+            if (a[0].contains("arm64") || a[0].contains("aarch64")) return "loader_arm64";
+            if (a[0].contains("x86_64")) return "loader_x86_64";
+            if (a[0].contains("armeabi")) return "loader_arm";
+        }
+        return "loader_arm64";
+    }
+
     private void cp(InputStream i, OutputStream o) throws IOException {
         byte[] b = new byte[65536]; int n;
         while ((n = i.read(b)) != -1) o.write(b, 0, n);
@@ -81,6 +92,13 @@ public class PRootPlugin extends Plugin {
                     new ProcessBuilder("chmod","+x",proot.getAbsolutePath()).start().waitFor();
                     emit(DEF, "\u001B[32m[+] PRoot ready!\u001B[0m\r\n");
                 }
+                // CRITICAL: extract proot loader - proot fails without PROOT_LOADER
+                File loader = new File(fd, "proot_loader");
+                if (!loader.exists() || loader.length() < 100) {
+                    try (InputStream lin = getContext().getAssets().open("public/native/" + getLoaderAsset());
+                         FileOutputStream lout = new FileOutputStream(loader)) { cp(lin, lout); }
+                    new ProcessBuilder("chmod","+x",loader.getAbsolutePath()).start().waitFor();
+                }
                 ready = true;
                 call.resolve();
             } catch (Exception e) {
@@ -118,6 +136,9 @@ public class PRootPlugin extends Plugin {
                 env.put("USER","root"); env.put("SHELL","/bin/sh");
                 env.put("LC_ALL","C");
                 env.put("PATH","/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin");
+                File loaderFile = new File(fd, "proot_loader");
+                if (loaderFile.exists()) env.put("PROOT_LOADER", loaderFile.getAbsolutePath());
+                env.put("PROOT_TMP_DIR", new File(fd, "alpine/tmp").getAbsolutePath());
                 pb.redirectErrorStream(true);
                 Process proc = pb.start();
                 sessions.put(sid, proc);
